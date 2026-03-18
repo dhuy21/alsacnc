@@ -1,6 +1,6 @@
 click==8.0.4
 kaleido==0.2.1
-pandas==1.4.1
+pandas==1.5.3
 plotly==5.11.0
 pre-commit==2.19.0
 psycopg2-binary==2.9.5
