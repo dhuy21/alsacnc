@@ -58,6 +58,9 @@ def main(config_path: str, **kwargs: Any) -> None:
     config = load_yaml(config_path)
     override_config(config, **kwargs)
 
+    if os.environ.get("IETC_MODEL_URL"):
+        config["ietc_model_url"] = os.environ["IETC_MODEL_URL"]
+
     if config["debug"]:
         os.environ["DB_NAME"] = "cookie_db_debug"
     init_db(

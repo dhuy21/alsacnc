@@ -17,7 +17,7 @@ from cookie_crawler.commands.cookie_banner_command import GetCookieBannerCommand
 from database.queries import insert_exception_into_db
 
 
-def run(self: BrowserManager) -> None:
+def run_impl(self: BrowserManager) -> None:
     assert self.browser_params.browser_id is not None
     display = None
     cur_website: Optional[Dict] = None
@@ -127,4 +127,4 @@ def run(self: BrowserManager) -> None:
 
 
 def monkey_patch_browser_manager() -> None:
-    BrowserManager.run = run
+    BrowserManager.run_impl = run_impl
