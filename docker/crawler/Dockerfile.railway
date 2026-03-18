@@ -25,6 +25,10 @@ RUN mkdir crawler
 WORKDIR /opt/crawler
 RUN git clone --depth 1 --branch v0.32.0 https://github.com/openwpm/OpenWPM.git openwpm
 WORKDIR /opt/crawler/openwpm
+# Pin Python 3.11 to keep compatibility with project dependencies (pandas 1.4, torch 1.13)
+RUN sed -i 's/python=3\.12\.[0-9]*/python=3.11/' environment.yaml && \
+    sed -i '/^- pandas=/d' environment.yaml && \
+    sed -i 's/- selenium=4\.[0-9.]*/- selenium>=4.0/' environment.yaml
 RUN ./install.sh
 ENV PATH $HOME/mamba/envs/openwpm/bin:$PATH
 
@@ -35,7 +39,8 @@ ENV FIREFOX_BINARY /opt/firefox-bin/firefox-bin
 # Install python dependencies (crawler + ML predictor requirements)
 WORKDIR /opt/crawler
 COPY requirements requirements
-RUN apt-get install libpq-dev -qq
+RUN apt-get install libpq-dev curl -qq
+RUN pip install setuptools wheel
 RUN pip install -r requirements/shared_requirements.txt
 RUN pip install -r requirements/crawler_requirements.txt
 RUN pip install -r requirements/ml_requirements.txt
