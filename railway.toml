@@ -1,13 +1,8 @@
 # Railway config-as-code
-# This file is used when deploying to Railway from a GitHub repo.
-# Each service should set RAILWAY_DOCKERFILE_PATH in its Railway dashboard
-# to point to the appropriate Dockerfile.
+# Each service sets RAILWAY_DOCKERFILE_PATH in its Railway dashboard variables:
 #
-# Service configurations (set in Railway dashboard):
-#
-# cookie_crawler:
+# cookie-crawler:
 #   RAILWAY_DOCKERFILE_PATH = docker/crawler/Dockerfile.railway
-#   Volume mount: /opt/crawler/data
 #
 # classifiers:
 #   RAILWAY_DOCKERFILE_PATH = docker/classifiers/Dockerfile.railway
@@ -17,10 +12,6 @@
 #
 # libretranslate-cc:
 #   Deploy via Docker image: libretranslate/libretranslate:v1.5.6
-#   Volume mount: /home/libretranslate/.local
-
-[build]
-dockerfilePath = "docker/crawler/Dockerfile.railway"
 
 [deploy]
 restartPolicyType = "ON_FAILURE"

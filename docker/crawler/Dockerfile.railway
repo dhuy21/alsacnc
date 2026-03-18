@@ -25,10 +25,25 @@ RUN mkdir crawler
 WORKDIR /opt/crawler
 RUN git clone --depth 1 --branch v0.32.0 https://github.com/openwpm/OpenWPM.git openwpm
 WORKDIR /opt/crawler/openwpm
-# Pin Python 3.11 to keep compatibility with project dependencies (pandas 1.4, torch 1.13)
+# Pin Python 3.11 and strip dev deps that require Python 3.12+
 RUN sed -i 's/python=3\.12\.[0-9]*/python=3.11/' environment.yaml && \
     sed -i '/^- pandas=/d' environment.yaml && \
-    sed -i 's/- selenium=4\.[0-9.]*/- selenium>=4.0/' environment.yaml
+    sed -i 's/- selenium=4\.[0-9.]*/- selenium>=4.0/' environment.yaml && \
+    sed -i '/^- sphinx/d' environment.yaml && \
+    sed -i '/^- recommonmark/d' environment.yaml && \
+    sed -i '/^- sphinx-markdown-tables/d' environment.yaml && \
+    sed -i '/^- mypy/d' environment.yaml && \
+    sed -i '/^- black/d' environment.yaml && \
+    sed -i '/^- isort/d' environment.yaml && \
+    sed -i '/^- pre-commit/d' environment.yaml && \
+    sed -i '/^- pytest/d' environment.yaml && \
+    sed -i '/^- ipython/d' environment.yaml && \
+    sed -i '/types-pyyaml/d' environment.yaml && \
+    sed -i '/types-redis/d' environment.yaml && \
+    sed -i '/types-tabulate/d' environment.yaml && \
+    sed -i '/pytest-split/d' environment.yaml && \
+    sed -i '/pytest-asyncio/d' environment.yaml && \
+    sed -i '/pytest-cov/d' environment.yaml
 RUN ./install.sh
 ENV PATH $HOME/mamba/envs/openwpm/bin:$PATH
 
