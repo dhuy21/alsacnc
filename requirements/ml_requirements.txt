@@ -6,6 +6,8 @@ kaleido==0.2.1
 Levenshtein~=0.23.0
 optuna==2.10.0
 pyyaml~=6.0
+numpy<2.0
+scipy==1.9.3
 scikit-learn==1.3.2
 service-streamer==0.1.2
 torch==1.13.1
