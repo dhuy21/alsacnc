@@ -5,6 +5,10 @@ MAX_RETRIES=30
 RETRY_INTERVAL=10
 
 echo "=== Railway Entrypoint ==="
+
+# Ensure volume directories exist (fresh volume mount is empty)
+mkdir -p /opt/crawler/data/experiments /opt/crawler/data/logs
+
 echo "Waiting for dependent services to become available..."
 
 # Wait for PostgreSQL using Python (psql may not be installed)
