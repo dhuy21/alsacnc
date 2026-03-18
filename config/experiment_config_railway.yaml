@@ -1,0 +1,123 @@
+# Railway deployment config - reduced resource usage
+engine: postgres
+num_browsers: 1
+num_attempts_per_website: 1
+timeout: 120
+experiment_id: railway_test
+screen_width: 1920
+screen_height: 1080
+dump_full_page_html: False
+save_cookie_banner_screenshot: False
+check_gpc_presence: False
+override: False
+extract_accept_none_cookies: True
+save_intervals: null
+first_interval: 0
+origin: de
+
+# Exploration parameters
+explore_cookie_banner: True
+exploration_modes: ["naive", "with_ietc_model"]
+dfs_depth: 1
+extract_cookie_settings_with_z_index: True
+explore_elements_yielding_new_text_only: True
+extract_cookie_banner_text: True
+extract_interactive_elements_text: False
+translate_non_english_text: True
+detect_dark_patterns: True
+ietc_model_url: http://host.docker.internal:5001/predict_ietc
+num_links_for_browsing: 5
+
+# CMP detection parameters
+detect_cmp:
+    detect_cmp_enabled: True
+    detect_cmp_methods: ["consentomatic", "tcfapi"]
+
+domains_config:
+    domains_source: list
+    domains_path: domains/test_domains.csv
+    countries: ["de"]
+    countries_desc: "test"
+    crux_date: "202303"
+    maximum_rank: 10000
+    num_domains: 0
+    num_samples_per_country_per_rank: 10000
+    split_interval: 200
+
+# language-related parameters
+supported_languages:
+  en:
+    model:
+      type: spacy
+      name: en_core_web_sm
+    language_name: English
+    keywords:
+      cookie:
+        - cookie
+        - legitimate interest
+  de:
+    model:
+      type: spacy
+      name: de_core_news_sm
+    language_name: German
+    keywords:
+      cookie:
+        - cookie
+        - berechtigtes interesse
+        - berechtigte interesse
+  fr:
+    model:
+      type: spacy
+      name: fr_core_news_sm
+    language_name: French
+    keywords:
+      cookie:
+        - cookie
+        - intérêt légitime
+        - intérêts légitimes
+
+# Modify this to use a custom proxy
+proxy:
+    proxy_enabled: False
+    proxy_server: host.docker.internal
+    proxy_port: 24000
+    no_proxies_on: localhost,127.0.0.1,host.docker.internal
+
+# Refer to https://github.com/openwpm/OpenWPM/blob/master/openwpm/config.py
+browser_config:
+    browser: "firefox"
+
+    display_mode: "xvfb"
+
+    cookie_instrument: True
+    js_instrument: False
+    http_instrument: False
+    navigation_instrument: False
+    save_content: False
+    callstack_instrument: False
+
+    seed_tar: null
+
+    bot_mitigation: True
+
+    donottrack: False
+    tp_cookies: "always"
+
+    prefs:
+        accessibility.tabfocus: 7
+        browser.cache.check_doc_frequency: 2
+        xpinstall.signatures.required: False
+        privacy.resistFingerprinting: False
+        privacy.trackingprotection.pbmode.enabled: False
+        privacy.trackingprotection.enabled: False
+        network.cookie.maxNumber: 10000
+        network.cookie.maxPerHost: 10000
+        network.cookie.quotaPerHost: 10000
+        privacy.socialtracking.block_cookies.enabled: False
+        network.cookie.thirdparty.sessionOnly: False
+        network.cookie.sameSite.laxByDefault: True
+
+
+# Development config
+debug: False
+clear_db: False

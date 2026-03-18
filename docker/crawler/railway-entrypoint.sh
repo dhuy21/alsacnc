@@ -71,4 +71,7 @@ done
 echo "Classifiers check complete."
 
 echo "All dependency checks done. Starting crawler..."
-exec python cookie_crawler/run_crawler.py "$@"
+
+CONFIG_PATH="${CRAWLER_CONFIG_PATH:-config/experiment_config.yaml}"
+echo "Using config: $CONFIG_PATH"
+exec python cookie_crawler/run_crawler.py --config_path "$CONFIG_PATH" "$@"
