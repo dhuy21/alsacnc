@@ -63,7 +63,7 @@ ENV FIREFOX_BINARY /opt/firefox-bin/firefox-bin
 WORKDIR /opt/crawler
 COPY requirements requirements
 RUN apt-get install libpq-dev -qq
-RUN pip install setuptools wheel
+RUN pip install "setuptools<72" wheel
 RUN pip install -r requirements/shared_requirements.txt
 RUN pip install -r requirements/crawler_requirements.txt
 
