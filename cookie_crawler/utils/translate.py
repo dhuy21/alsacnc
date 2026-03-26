@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Optional
 
 import langdetect
@@ -7,8 +6,8 @@ import requests
 
 logger = logging.getLogger("openwpm")
 
-LIBRE_TRANSLATE_HOST = os.environ.get("LIBRE_TRANSLATE_HOST", "host.docker.internal")
-LIBRE_TRANSLATE_PORT = int(os.environ.get("LIBRE_TRANSLATE_PORT", "5000"))
+LIBRE_TRANSLATE_HOST = "host.docker.internal"
+LIBRE_TRANSLATE_PORT = 5000
 LIBRE_TRANSLATE_URL = f"http://{LIBRE_TRANSLATE_HOST}:{LIBRE_TRANSLATE_PORT}"
 
 
