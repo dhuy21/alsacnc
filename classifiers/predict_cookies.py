@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from multiprocessing import Pool, cpu_count
 from typing import Any, Dict, List, Optional, Tuple
@@ -135,12 +136,23 @@ def copy_cookies_iteration(ts: Dict, experiment_id: str) -> Dict:
     start_timestamp = ts["start_timestamp"].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     end_timestamp = ts["end_timestamp"].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
-    openwpm_engine = create_engine_for_openwpm_db(experiment_id)
-    cookies = pd.read_sql(
-        "SELECT * FROM javascript_cookies WHERE visit_id = ? AND ? <= time_stamp AND time_stamp <= ?",
-        openwpm_engine,
-        params=(str(ts["visit_id"]), start_timestamp, end_timestamp),
-    )
+    if os.environ.get("OPENWPM_STORAGE") == "postgres":
+        from database.queries import get_postgres_engine
+
+        engine = get_postgres_engine()
+        cookies = pd.read_sql(
+            "SELECT * FROM openwpm_javascript_cookies "
+            "WHERE visit_id = %(vid)s AND %(start)s <= time_stamp AND time_stamp <= %(end)s",
+            engine,
+            params={"vid": str(ts["visit_id"]), "start": start_timestamp, "end": end_timestamp},
+        )
+    else:
+        openwpm_engine = create_engine_for_openwpm_db(experiment_id)
+        cookies = pd.read_sql(
+            "SELECT * FROM javascript_cookies WHERE visit_id = ? AND ? <= time_stamp AND time_stamp <= ?",
+            openwpm_engine,
+            params=(str(ts["visit_id"]), start_timestamp, end_timestamp),
+        )
     assert cookies["time_stamp"].apply(lambda x: x[-1] == "Z").all()
     cookies["timestamp"] = cookies["time_stamp"].apply(
         lambda x: datetime.fromisoformat(x[:-1])

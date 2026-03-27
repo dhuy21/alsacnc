@@ -147,9 +147,18 @@ def main(config_path: str, **kwargs: Any) -> None:
         browser_params[-1].custom_params.update(config)
         browser_params[-1].custom_params["selectors"] = selectors
 
-    openwpm_db_path = manager_params.data_directory / "crawl.sqlite"
-    storage_provider = SQLiteStorageProvider(openwpm_db_path)
-    os.environ["OPENWPM_DB_PATH"] = str(openwpm_db_path)
+    if os.environ.get("OPENWPM_STORAGE") == "postgres":
+        from cookie_crawler.storage.postgres_provider import PostgresStorageProvider
+
+        pg_url = (
+            f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}"
+            f"@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME')}"
+        )
+        storage_provider = PostgresStorageProvider(pg_url)
+    else:
+        openwpm_db_path = manager_params.data_directory / "crawl.sqlite"
+        storage_provider = SQLiteStorageProvider(openwpm_db_path)
+        os.environ["OPENWPM_DB_PATH"] = str(openwpm_db_path)
     max_num_attempts = (
         experiment["num_full_iterations"] + 1
         if config["override"]

@@ -388,6 +388,14 @@ def create_engine_for_openwpm_db(experiment_id: str) -> Engine:
     )
 
 
+def get_postgres_engine() -> Engine:
+    db_url = (
+        f"postgresql+psycopg2://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}"
+        f"@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME')}"
+    )
+    return create_engine(db_url, poolclass=NullPool)
+
+
 def export_interface_interference_screenshots(
     experiment_id: str, verbose: bool
 ) -> None:
