@@ -10,7 +10,6 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
@@ -24,7 +23,7 @@ logger = logging.getLogger("crawler_worker")
 
 POLL_INTERVAL = 5
 LEASE_TIMEOUT_SECONDS = 7200  # 2 hours: mark stuck jobs as failed
-WORKER_ID = f"crawler-{os.getpid()}"
+WORKER_ID = f"crawler-{os.getenv('HOSTNAME', os.getpid())}"
 
 
 def get_engine():
@@ -188,7 +187,30 @@ def recover_stuck_jobs(engine):
             logger.warning(f"Recovered {result.rowcount} stuck crawl jobs")
 
 
-def execute_crawl(job_id, config, experiment_id, engine):
+def _resolve_experiment_id_from_db(engine):
+    """Get the most recently created experiment_id from the database."""
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("SELECT id FROM experiments ORDER BY timestamp DESC LIMIT 1")
+        ).fetchone()
+    return row[0] if row else None
+
+
+def _propagate_experiment_id(engine, pipeline_id, experiment_id):
+    """Set experiment_id on all jobs in this pipeline so downstream steps know which experiment to target."""
+    if not pipeline_id or not experiment_id:
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE pipeline_jobs SET experiment_id = :eid WHERE pipeline_id = :pid AND experiment_id IS NULL"
+            ),
+            {"eid": experiment_id, "pid": pipeline_id},
+        )
+    logger.info(f"Propagated experiment_id={experiment_id} to pipeline {pipeline_id}")
+
+
+def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
     """Execute crawl as subprocess and monitor progress."""
     config = config or {}
     config_path = config.get("config_path", "config/experiment_config_railway.yaml")
@@ -203,6 +225,8 @@ def execute_crawl(job_id, config, experiment_id, engine):
 
     if config.get("num_browsers"):
         cmd.extend(["--num_browsers", str(config["num_browsers"])])
+    if config.get("num_websites"):
+        cmd.extend(["--num_domains", str(config["num_websites"])])
     if config.get("domains_path"):
         cmd.extend(["--domains_path", config["domains_path"]])
 
@@ -243,6 +267,9 @@ def execute_crawl(job_id, config, experiment_id, engine):
 
         if proc.returncode == 0:
             logger.info(f"Job {job_id}: Crawl completed successfully")
+            resolved_eid = _resolve_experiment_id_from_db(engine)
+            if resolved_eid:
+                _propagate_experiment_id(engine, pipeline_id, resolved_eid)
             return True, logs_text
         else:
             logger.error(f"Job {job_id}: Crawl failed with code {proc.returncode}")
@@ -286,7 +313,7 @@ def run_worker():
             job_id, job_type, config, experiment_id, pipeline_id = job
             logger.info(f"Claimed job {job_id} (type={job_type}, experiment={experiment_id})")
 
-            success, logs_text = execute_crawl(job_id, config, experiment_id, engine)
+            success, logs_text = execute_crawl(job_id, config, experiment_id, engine, pipeline_id)
 
             if success:
                 complete_job(engine, job_id, {"status": "completed"})

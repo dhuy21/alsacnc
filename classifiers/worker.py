@@ -7,7 +7,6 @@ Runs as a background thread alongside the Flask IETC server.
 import json
 import logging
 import os
-import signal
 import subprocess
 import sys
 import time
@@ -24,7 +23,7 @@ logger = logging.getLogger("classifiers_worker")
 
 POLL_INTERVAL = 5
 LEASE_TIMEOUT_SECONDS = 7200
-WORKER_ID = f"classifiers-{os.getpid()}"
+WORKER_ID = f"classifiers-{os.getenv('HOSTNAME', os.getpid())}"
 JOB_TYPES = ("predict_cookies", "predict_purposes", "summary")
 
 

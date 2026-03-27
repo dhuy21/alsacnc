@@ -29,12 +29,18 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
+_engine = None
+
+
 def get_engine():
-    db_url = (
-        f"postgresql+psycopg2://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}"
-        f"@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME')}"
-    )
-    return create_engine(db_url, poolclass=NullPool)
+    global _engine
+    if _engine is None:
+        db_url = (
+            f"postgresql+psycopg2://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}"
+            f"@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME')}"
+        )
+        _engine = create_engine(db_url, poolclass=NullPool)
+    return _engine
 
 
 def ensure_tables():
@@ -245,14 +251,14 @@ async def create_experiment(
     return RedirectResponse(url=f"/pipeline/{pipeline_id}", status_code=303)
 
 
-def _insert_job(job_type, config, pipeline_id, depends_on=None):
+def _insert_job(job_type, config, pipeline_id, depends_on=None, experiment_id=None):
     engine = get_engine()
     with engine.begin() as conn:
         row = conn.execute(
             text(
                 """
-            INSERT INTO pipeline_jobs (job_type, status, config, pipeline_id, depends_on_id)
-            VALUES (:type, 'pending', :config, :pid, :dep)
+            INSERT INTO pipeline_jobs (job_type, status, config, pipeline_id, depends_on_id, experiment_id)
+            VALUES (:type, 'pending', :config, :pid, :dep, :eid)
             RETURNING id
             """
             ),
@@ -261,6 +267,7 @@ def _insert_job(job_type, config, pipeline_id, depends_on=None):
                 "config": json.dumps(config),
                 "pid": pipeline_id,
                 "dep": depends_on,
+                "eid": experiment_id,
             },
         ).fetchone()
     return row[0]
@@ -334,13 +341,7 @@ async def run_single_step(
     if job_type == "crawl":
         config["config_path"] = "config/experiment_config_railway.yaml"
 
-    _insert_job(job_type, config, pipeline_id)
-
-    if experiment_id:
-        execute(
-            "UPDATE pipeline_jobs SET experiment_id = :eid WHERE pipeline_id = :pid",
-            {"eid": experiment_id, "pid": pipeline_id},
-        )
+    _insert_job(job_type, config, pipeline_id, experiment_id=experiment_id)
 
     return RedirectResponse(url=f"/pipeline/{pipeline_id}", status_code=303)
 

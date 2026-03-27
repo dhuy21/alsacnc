@@ -148,7 +148,10 @@ def main(experiment_id: Optional[str]) -> None:
 
     domains_path = "domains/crux_202303_eu_uk_top_10000_N_10000.csv"
 
-    print("Number of websites in the crawling list:", len(pd.read_csv(domains_path)))
+    try:
+        print("Number of websites in the crawling list:", len(pd.read_csv(domains_path)))
+    except FileNotFoundError:
+        print(f"Domains file not found ({domains_path}), skipping crawling list count")
 
     supported_languages = [
         "da",
