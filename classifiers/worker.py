@@ -37,7 +37,7 @@ def get_engine():
 
 
 def ensure_tables(engine):
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text(
                 """
@@ -61,12 +61,11 @@ def ensure_tables(engine):
             """
             )
         )
-        conn.commit()
 
 
 def claim_job(engine):
     type_filter = ", ".join(f"'{t}'" for t in JOB_TYPES)
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         row = conn.execute(
             text(
                 f"""
@@ -94,21 +93,19 @@ def claim_job(engine):
             ),
             {"worker_id": WORKER_ID},
         ).fetchone()
-        conn.commit()
         return row
 
 
 def update_job_progress(engine, job_id, progress_data):
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text("UPDATE pipeline_jobs SET progress = :progress WHERE id = :id"),
             {"progress": json.dumps(progress_data), "id": job_id},
         )
-        conn.commit()
 
 
 def complete_job(engine, job_id, result_data=None):
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text(
                 """
@@ -121,11 +118,10 @@ def complete_job(engine, job_id, result_data=None):
             ),
             {"result": json.dumps(result_data) if result_data else None, "id": job_id},
         )
-        conn.commit()
 
 
 def fail_job(engine, job_id, error_msg, logs_text=None):
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text(
                 """
@@ -139,13 +135,12 @@ def fail_job(engine, job_id, error_msg, logs_text=None):
             ),
             {"error": error_msg, "logs": logs_text, "id": job_id},
         )
-        conn.commit()
 
 
 def chain_next_job(engine, job_id, pipeline_id):
     if not pipeline_id:
         return
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         next_job = conn.execute(
             text(
                 """
@@ -156,7 +151,6 @@ def chain_next_job(engine, job_id, pipeline_id):
             ),
             {"job_id": job_id, "pipeline_id": pipeline_id},
         ).fetchone()
-        conn.commit()
     if next_job:
         logger.info(f"Next pipeline job {next_job[0]} ({next_job[1]}) is now eligible")
 

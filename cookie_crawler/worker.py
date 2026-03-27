@@ -37,7 +37,7 @@ def get_engine():
 
 def ensure_tables(engine):
     """Create pipeline_jobs table if it doesn't exist."""
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text(
                 """
@@ -70,12 +70,11 @@ def ensure_tables(engine):
             """
             )
         )
-        conn.commit()
 
 
 def claim_job(engine):
     """Claim next available crawl job using SKIP LOCKED."""
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         row = conn.execute(
             text(
                 """
@@ -103,23 +102,21 @@ def claim_job(engine):
             ),
             {"worker_id": WORKER_ID},
         ).fetchone()
-        conn.commit()
         return row
 
 
 def update_job_progress(engine, job_id, progress_data):
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text(
                 "UPDATE pipeline_jobs SET progress = :progress WHERE id = :id"
             ),
             {"progress": json.dumps(progress_data), "id": job_id},
         )
-        conn.commit()
 
 
 def complete_job(engine, job_id, result_data=None):
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text(
                 """
@@ -132,11 +129,10 @@ def complete_job(engine, job_id, result_data=None):
             ),
             {"result": json.dumps(result_data) if result_data else None, "id": job_id},
         )
-        conn.commit()
 
 
 def fail_job(engine, job_id, error_msg, logs_text=None):
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text(
                 """
@@ -150,14 +146,13 @@ def fail_job(engine, job_id, error_msg, logs_text=None):
             ),
             {"error": error_msg, "logs": logs_text, "id": job_id},
         )
-        conn.commit()
 
 
 def chain_next_job(engine, job_id, pipeline_id, experiment_id):
     """If this job is part of a pipeline, check if the next step should be created."""
     if not pipeline_id:
         return
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         next_job = conn.execute(
             text(
                 """
@@ -168,14 +163,13 @@ def chain_next_job(engine, job_id, pipeline_id, experiment_id):
             ),
             {"job_id": job_id, "pipeline_id": pipeline_id},
         ).fetchone()
-        conn.commit()
     if next_job:
         logger.info(f"Next pipeline job {next_job[0]} is now eligible")
 
 
 def recover_stuck_jobs(engine):
     """Mark jobs stuck in 'running' beyond lease timeout as failed."""
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         result = conn.execute(
             text(
                 """
@@ -190,7 +184,6 @@ def recover_stuck_jobs(engine):
                 .replace(":timeout", str(LEASE_TIMEOUT_SECONDS))
             ),
         )
-        conn.commit()
         if result.rowcount > 0:
             logger.warning(f"Recovered {result.rowcount} stuck crawl jobs")
 

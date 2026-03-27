@@ -39,7 +39,7 @@ def get_engine():
 
 def ensure_tables():
     engine = get_engine()
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text(
                 """
@@ -72,7 +72,6 @@ def ensure_tables():
             """
             )
         )
-        conn.commit()
 
 
 @app.on_event("startup")
@@ -100,9 +99,8 @@ def query_one(sql, params=None):
 
 def execute(sql, params=None):
     engine = get_engine()
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         result = conn.execute(text(sql), params or {})
-        conn.commit()
     return result
 
 
@@ -244,7 +242,7 @@ async def create_experiment(
 
 def _insert_job(job_type, config, pipeline_id, depends_on=None):
     engine = get_engine()
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         row = conn.execute(
             text(
                 """
@@ -260,7 +258,6 @@ def _insert_job(job_type, config, pipeline_id, depends_on=None):
                 "dep": depends_on,
             },
         ).fetchone()
-        conn.commit()
     return row[0]
 
 
