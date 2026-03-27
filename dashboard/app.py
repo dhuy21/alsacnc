@@ -147,11 +147,11 @@ async def index(request: Request):
         "SELECT * FROM pipeline_jobs WHERE status IN ('pending', 'running') ORDER BY created_at"
     )
 
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "experiments": experiments,
-        "active_jobs": active_jobs,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={"experiments": experiments, "active_jobs": active_jobs},
+    )
 
 
 @app.get("/experiment/{experiment_id}", response_class=HTMLResponse)
@@ -198,14 +198,17 @@ async def experiment_detail(request: Request, experiment_id: str):
 
     stats = _compute_stats(websites)
 
-    return templates.TemplateResponse("experiment.html", {
-        "request": request,
-        "experiment": experiment,
-        "websites": websites,
-        "errors": errors,
-        "jobs": jobs,
-        "stats": stats,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="experiment.html",
+        context={
+            "experiment": experiment,
+            "websites": websites,
+            "errors": errors,
+            "jobs": jobs,
+            "stats": stats,
+        },
+    )
 
 
 def _compute_stats(websites):
@@ -232,7 +235,9 @@ def _compute_stats(websites):
 
 @app.get("/new", response_class=HTMLResponse)
 async def new_experiment_form(request: Request):
-    return templates.TemplateResponse("new_experiment.html", {"request": request})
+    return templates.TemplateResponse(
+        request=request, name="new_experiment.html",
+    )
 
 
 @app.post("/new")
@@ -296,12 +301,11 @@ async def pipeline_status(request: Request, pipeline_id: str):
             experiment_id = j.experiment_id
             break
 
-    return templates.TemplateResponse("pipeline.html", {
-        "request": request,
-        "jobs": jobs,
-        "pipeline_id": pipeline_id,
-        "experiment_id": experiment_id,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="pipeline.html",
+        context={"jobs": jobs, "pipeline_id": pipeline_id, "experiment_id": experiment_id},
+    )
 
 
 @app.post("/pipeline/{pipeline_id}/pause")
