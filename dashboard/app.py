@@ -346,14 +346,23 @@ async def cancel_pipeline(pipeline_id: str):
 async def run_single_step(
     job_type: str = Form(...),
     experiment_id: Optional[str] = Form(None),
+    num_websites: int = Form(10),
+    num_browsers: int = Form(1),
 ):
     if job_type not in VALID_JOB_TYPES:
         return HTMLResponse("Invalid job type", status_code=400)
+
+    if experiment_id and job_type != "crawl":
+        exists = query_one("SELECT id FROM experiments WHERE id = :id", {"id": experiment_id})
+        if not exists:
+            return HTMLResponse("Experiment not found", status_code=404)
 
     pipeline_id = str(uuid.uuid4())[:8]
     config = {}
     if job_type == "crawl":
         config["config_path"] = "config/experiment_config_railway.yaml"
+        config["num_browsers"] = num_browsers
+        config["num_websites"] = num_websites
 
     _insert_job(job_type, config, pipeline_id, experiment_id=experiment_id)
 

@@ -7,8 +7,10 @@ Runs as a background thread alongside the Flask IETC server.
 import json
 import logging
 import os
+import signal
 import subprocess
 import sys
+import threading
 import time
 
 from sqlalchemy import create_engine, text
@@ -104,10 +106,10 @@ def claim_job(engine):
 
 
 def recover_stuck_jobs(engine):
-    """Mark jobs stuck in 'running' beyond lease timeout as failed."""
+    """Mark jobs stuck in 'running' beyond lease timeout as failed, then cascade."""
     type_filter = ", ".join(f"'{t}'" for t in JOB_TYPES)
     with engine.begin() as conn:
-        result = conn.execute(
+        rows = conn.execute(
             text(
                 f"""
             UPDATE pipeline_jobs
@@ -117,11 +119,13 @@ def recover_stuck_jobs(engine):
             WHERE status = 'running'
               AND job_type IN ({type_filter})
               AND started_at < TIMEZONE('utc', CURRENT_TIMESTAMP) - INTERVAL '{LEASE_TIMEOUT_SECONDS} seconds'
+            RETURNING id, pipeline_id
             """
             ),
-        )
-        if result.rowcount > 0:
-            logger.warning(f"Recovered {result.rowcount} stuck classifier jobs")
+        ).fetchall()
+    for job_id, pipeline_id in rows:
+        logger.warning(f"Recovered stuck classifier job {job_id}")
+        cascade_fail_dependents(engine, job_id, pipeline_id)
 
 
 def update_job_progress(engine, job_id, progress_data):
@@ -144,7 +148,7 @@ def complete_job(engine, job_id, result_data=None):
             WHERE id = :id
             """
             ),
-            {"result": json.dumps(result_data) if result_data else None, "id": job_id},
+            {"result": json.dumps(result_data) if result_data is not None else None, "id": job_id},
         )
 
 
@@ -222,6 +226,7 @@ def execute_summary(job_id, config, experiment_id, engine):
 
 
 def _run_subprocess(cmd, job_id, engine, cwd=None):
+    proc = None
     try:
         proc = subprocess.Popen(
             cmd,
@@ -253,6 +258,10 @@ def _run_subprocess(cmd, job_id, engine, cwd=None):
     except Exception as e:
         logger.error(f"Job {job_id}: Exception: {e}")
         return False, str(e)
+    finally:
+        if proc and proc.poll() is None:
+            proc.kill()
+            proc.wait()
 
 
 EXECUTORS = {
@@ -264,19 +273,27 @@ EXECUTORS = {
 
 def run_worker(shutdown_event=None):
     """Main worker loop. If shutdown_event is provided (threading.Event), use it for stopping."""
+    if shutdown_event is None:
+        shutdown_event = threading.Event()
+
+        def _handle_signal(signum, frame):
+            logger.info(f"Received signal {signum}, shutting down...")
+            shutdown_event.set()
+
+        signal.signal(signal.SIGTERM, _handle_signal)
+        signal.signal(signal.SIGINT, _handle_signal)
+
     logger.info(f"Classifiers worker started (id={WORKER_ID})")
 
     engine = get_engine()
     ensure_tables(engine)
     logger.info("Connected to PostgreSQL, pipeline_jobs table ready")
 
-    def should_stop():
-        if shutdown_event:
-            return shutdown_event.is_set()
-        return False
+    def _sleep():
+        shutdown_event.wait(POLL_INTERVAL)
 
     recovery_counter = 0
-    while not should_stop():
+    while not shutdown_event.is_set():
         try:
             recovery_counter += 1
             if recovery_counter % 60 == 0:
@@ -284,7 +301,7 @@ def run_worker(shutdown_event=None):
 
             job = claim_job(engine)
             if job is None:
-                time.sleep(POLL_INTERVAL)
+                _sleep()
                 continue
 
             job_id, job_type, config, experiment_id, pipeline_id = job
@@ -306,7 +323,7 @@ def run_worker(shutdown_event=None):
 
         except Exception as e:
             logger.error(f"Worker loop error: {e}", exc_info=True)
-            time.sleep(POLL_INTERVAL)
+            _sleep()
 
     logger.info("Classifiers worker stopped")
 

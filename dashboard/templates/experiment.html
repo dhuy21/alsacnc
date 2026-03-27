@@ -119,10 +119,20 @@
     <h2>Run Individual Step</h2>
     <div class="step-buttons">
         {% for step in ['crawl', 'predict_cookies', 'predict_purposes', 'summary'] %}
-        <form method="post" action="/step/run" style="display:inline">
+        {% set step_jobs = jobs | selectattr('job_type', 'equalto', step) | list %}
+        {% set step_running = step_jobs | selectattr('status', 'equalto', 'running') | list | length > 0 %}
+        {% set step_completed = step_jobs | selectattr('status', 'equalto', 'completed') | list | length > 0 %}
+        <form method="post" action="/step/run" style="display:inline"
+              onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Submitting...';">
             <input type="hidden" name="job_type" value="{{ step }}">
             <input type="hidden" name="experiment_id" value="{{ experiment.id }}">
+            {% if step_running %}
+            <button type="button" class="btn btn-secondary" disabled>{{ step | replace('_', ' ') | title }} (running...)</button>
+            {% elif step_completed %}
+            <button type="submit" class="btn btn-secondary" title="Re-run this step">{{ step | replace('_', ' ') | title }} &#10003;</button>
+            {% else %}
             <button type="submit" class="btn btn-secondary">Run {{ step | replace('_', ' ') | title }}</button>
+            {% endif %}
         </form>
         {% endfor %}
     </div>

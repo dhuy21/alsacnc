@@ -15,7 +15,6 @@ from shared_utils import load_yaml
 logger = logging.getLogger("flask_server")
 
 app = Flask(__name__)
-model = None
 streamer_ietc: Optional[ThreadedStreamer] = None
 
 

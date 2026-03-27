@@ -126,7 +126,7 @@ def complete_job(engine, job_id, result_data=None):
             WHERE id = :id
             """
             ),
-            {"result": json.dumps(result_data) if result_data else None, "id": job_id},
+            {"result": json.dumps(result_data) if result_data is not None else None, "id": job_id},
         )
 
 
@@ -171,9 +171,9 @@ def cascade_fail_dependents(engine, job_id, pipeline_id):
 
 
 def recover_stuck_jobs(engine):
-    """Mark jobs stuck in 'running' beyond lease timeout as failed."""
+    """Mark jobs stuck in 'running' beyond lease timeout as failed, then cascade."""
     with engine.begin() as conn:
-        result = conn.execute(
+        rows = conn.execute(
             text(
                 """
             UPDATE pipeline_jobs
@@ -183,12 +183,14 @@ def recover_stuck_jobs(engine):
             WHERE status = 'running'
               AND job_type = 'crawl'
               AND started_at < TIMEZONE('utc', CURRENT_TIMESTAMP) - INTERVAL ':timeout seconds'
+            RETURNING id, pipeline_id
             """
                 .replace(":timeout", str(LEASE_TIMEOUT_SECONDS))
             ),
-        )
-        if result.rowcount > 0:
-            logger.warning(f"Recovered {result.rowcount} stuck crawl jobs")
+        ).fetchall()
+    for job_id, pipeline_id in rows:
+        logger.warning(f"Recovered stuck crawl job {job_id}")
+        cascade_fail_dependents(engine, job_id, pipeline_id)
 
 
 def _resolve_experiment_id_from_db(engine):
@@ -239,6 +241,7 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
     logger.info(f"Job {job_id}: Starting crawl with cmd: {' '.join(cmd)}")
     update_job_progress(engine, job_id, {"status": "starting", "message": "Launching crawler..."})
 
+    proc = None
     try:
         proc = subprocess.Popen(
             cmd,
@@ -273,9 +276,12 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
 
         if proc.returncode == 0:
             logger.info(f"Job {job_id}: Crawl completed successfully")
-            resolved_eid = _resolve_experiment_id_from_db(engine)
-            if resolved_eid:
-                _propagate_experiment_id(engine, pipeline_id, resolved_eid)
+            try:
+                resolved_eid = _resolve_experiment_id_from_db(engine)
+                if resolved_eid:
+                    _propagate_experiment_id(engine, pipeline_id, resolved_eid)
+            except Exception as prop_err:
+                logger.warning(f"Job {job_id}: experiment_id propagation failed (crawl still OK): {prop_err}")
             return True, logs_text
         else:
             logger.error(f"Job {job_id}: Crawl failed with code {proc.returncode}")
@@ -284,6 +290,10 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
     except Exception as e:
         logger.error(f"Job {job_id}: Crawl exception: {e}")
         return False, str(e)
+    finally:
+        if proc and proc.poll() is None:
+            proc.kill()
+            proc.wait()
 
 
 def run_worker():

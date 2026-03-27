@@ -50,7 +50,8 @@
 
         <div class="form-actions">
             <a href="/" class="btn btn-secondary">Cancel</a>
-            <button type="submit" class="btn btn-primary btn-lg">Start Experiment</button>
+            <button type="submit" class="btn btn-primary btn-lg"
+                    onclick="this.disabled=true; this.textContent='Starting...'; this.form.submit();">Start Experiment</button>
         </div>
     </form>
 </section>
