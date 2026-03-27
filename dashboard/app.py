@@ -22,11 +22,31 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
+import logging
+import traceback
+
+from fastapi.responses import PlainTextResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+
 app = FastAPI(title="ALSACNC Dashboard")
 
 BASE_DIR = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+logger = logging.getLogger("dashboard")
+
+
+class DebugMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        try:
+            return await call_next(request)
+        except Exception as exc:
+            tb = traceback.format_exc()
+            logger.error(f"Unhandled: {tb}")
+            return PlainTextResponse(f"ERROR: {exc}\n\n{tb}", status_code=500)
+
+
+app.add_middleware(DebugMiddleware)
 
 
 def get_engine():
