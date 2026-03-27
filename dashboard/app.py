@@ -182,7 +182,8 @@ async def experiment_detail(request: Request, experiment_id: str):
         {"eid": experiment_id},
     )
 
-    stats = _compute_stats(websites)
+    error_names = {e.website_name for e in errors}
+    stats = _compute_stats(websites, error_names)
 
     return templates.TemplateResponse(
         request=request,
@@ -191,28 +192,33 @@ async def experiment_detail(request: Request, experiment_id: str):
             "experiment": experiment,
             "websites": websites,
             "errors": errors,
+            "error_names": error_names,
             "jobs": jobs,
             "stats": stats,
         },
     )
 
 
-def _compute_stats(websites):
+def _compute_stats(websites, error_names=None):
+    error_names = error_names or set()
     total = len(websites)
     if total == 0:
         return {}
-    success = sum(1 for w in websites if w.success == 1)
-    banners = sum(1 for w in websites if w.cookie_notice_detected)
-    tracking = sum(1 for w in websites if w.tracking_detected and w.tracking_detected >= 2)
-    forced = sum(1 for w in websites if w.forced_action_detected)
-    interference = sum(1 for w in websites if w.interface_interference_detected)
+    crawled = sum(1 for w in websites if w.success == 1)
+    analyzed = [w for w in websites if w.success == 1 and w.name not in error_names]
+    analyzed_count = len(analyzed)
+    banners = sum(1 for w in analyzed if w.cookie_notice_detected)
+    tracking = sum(1 for w in analyzed if w.tracking_detected and w.tracking_detected >= 2)
+    forced = sum(1 for w in analyzed if w.forced_action_detected)
+    interference = sum(1 for w in analyzed if w.interface_interference_detected)
 
     return {
         "total": total,
-        "success": success,
-        "success_pct": round(100 * success / total, 1) if total else 0,
+        "crawled": crawled,
+        "crawled_pct": round(100 * crawled / total, 1) if total else 0,
+        "analyzed": analyzed_count,
+        "analyzed_pct": round(100 * analyzed_count / total, 1) if total else 0,
         "banners": banners,
-        "banners_pct": round(100 * banners / success, 1) if success else 0,
         "tracking": tracking,
         "forced_action": forced,
         "interface_interference": interference,
