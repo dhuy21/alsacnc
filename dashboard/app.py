@@ -115,10 +115,10 @@ async def index(request: Request):
         SELECT e.id, e.timestamp, e.country,
                COUNT(w.id) AS num_websites,
                SUM(CASE WHEN w.success = 1 THEN 1 ELSE 0 END) AS num_success,
-               e.config
+               e.config::text AS config
         FROM experiments e
         LEFT JOIN websites w ON w.experiment_id = e.id
-        GROUP BY e.id, e.timestamp, e.country, e.config
+        GROUP BY e.id, e.timestamp, e.country, e.config::text
         ORDER BY e.timestamp DESC
         """
     )
