@@ -86,11 +86,11 @@
                     {% else %}<span class="status status-pending">-</span>{% endif %}
                 </td>
                 <td>{{ w.language or '-' }}</td>
-                <td>{{ 'Yes' if w.cookie_notice_detected else 'No' }}</td>
+                <td>{{ 'Yes' if w.cookie_notice_detected else ('No' if w.cookie_notice_detected is not none else '-') }}</td>
                 <td>{{ w.tracking_detected if w.tracking_detected is not none else '-' }}</td>
                 <td>{{ w.accept_button_detected if w.accept_button_detected is not none else '-' }}</td>
                 <td>{{ w.reject_button_detected if w.reject_button_detected is not none else '-' }}</td>
-                <td>{{ 'Yes' if w.forced_action_detected else 'No' }}</td>
+                <td>{{ 'Yes' if w.forced_action_detected else ('No' if w.forced_action_detected is not none else '-') }}</td>
             </tr>
             {% endfor %}
         </tbody>

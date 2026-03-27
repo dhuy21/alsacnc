@@ -10,17 +10,26 @@
 </div>
 
 <section class="card">
+    {% set has_pending = jobs | selectattr('status', 'equalto', 'pending') | list | length > 0 %}
+    {% set has_paused = jobs | selectattr('status', 'equalto', 'paused') | list | length > 0 %}
+    {% if has_pending or has_paused %}
     <div class="pipeline-controls">
+        {% if has_pending %}
         <form method="post" action="/pipeline/{{ pipeline_id }}/pause" style="display:inline">
-            <button type="submit" class="btn btn-secondary btn-sm">Pause</button>
+            <button type="submit" class="btn btn-secondary btn-sm">Pause Pending</button>
         </form>
+        {% endif %}
+        {% if has_paused %}
         <form method="post" action="/pipeline/{{ pipeline_id }}/resume" style="display:inline">
-            <button type="submit" class="btn btn-secondary btn-sm">Resume</button>
+            <button type="submit" class="btn btn-secondary btn-sm">Resume Paused</button>
         </form>
-        <form method="post" action="/pipeline/{{ pipeline_id }}/cancel" style="display:inline">
+        {% endif %}
+        <form method="post" action="/pipeline/{{ pipeline_id }}/cancel" style="display:inline"
+              onsubmit="return confirm('Cancel all remaining jobs in this pipeline?')">
             <button type="submit" class="btn btn-danger btn-sm">Cancel Remaining</button>
         </form>
     </div>
+    {% endif %}
 
     <div class="pipeline-steps" id="pipeline-steps">
         {% for job in jobs %}

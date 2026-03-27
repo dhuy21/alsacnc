@@ -11,7 +11,7 @@ Provides:
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -22,12 +22,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
-app = FastAPI(title="ALSACNC Dashboard")
-
 BASE_DIR = Path(__file__).resolve().parent
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
-
 
 _engine = None
 
@@ -80,9 +75,15 @@ def ensure_tables():
         )
 
 
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(a):
     ensure_tables()
+    yield
+
+
+app = FastAPI(title="ALSACNC Dashboard", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +107,7 @@ def query_one(sql, params=None):
 def execute(sql, params=None):
     engine = get_engine()
     with engine.begin() as conn:
-        result = conn.execute(text(sql), params or {})
-    return result
+        conn.execute(text(sql), params or {})
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +226,10 @@ async def new_experiment_form(request: Request):
     )
 
 
+VALID_JOB_TYPES = {"crawl", "predict_cookies", "predict_purposes", "summary"}
+VALID_NUM_WEBSITES = {3, 10, 100, 1000, 10000}
+
+
 @app.post("/new")
 async def create_experiment(
     request: Request,
@@ -233,6 +237,13 @@ async def create_experiment(
     num_browsers: int = Form(1),
     mode: str = Form("full"),
 ):
+    if num_websites not in VALID_NUM_WEBSITES:
+        return HTMLResponse("Invalid number of websites", status_code=400)
+    if num_browsers < 1 or num_browsers > 10:
+        return HTMLResponse("Invalid number of browsers", status_code=400)
+    if mode not in ("full", "step"):
+        return HTMLResponse("Invalid mode", status_code=400)
+
     pipeline_id = str(uuid.uuid4())[:8]
     config = {
         "config_path": "config/experiment_config_railway.yaml",
@@ -336,6 +347,9 @@ async def run_single_step(
     job_type: str = Form(...),
     experiment_id: Optional[str] = Form(None),
 ):
+    if job_type not in VALID_JOB_TYPES:
+        return HTMLResponse("Invalid job type", status_code=400)
+
     pipeline_id = str(uuid.uuid4())[:8]
     config = {}
     if job_type == "crawl":
@@ -383,6 +397,11 @@ async def api_experiments():
         """
     )
     return [{"id": r.id, "timestamp": str(r.timestamp), "num_websites": r.num_websites} for r in rows]
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

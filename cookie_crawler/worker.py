@@ -147,23 +147,27 @@ def fail_job(engine, job_id, error_msg, logs_text=None):
         )
 
 
-def chain_next_job(engine, job_id, pipeline_id, experiment_id):
-    """If this job is part of a pipeline, check if the next step should be created."""
+def cascade_fail_dependents(engine, job_id, pipeline_id):
+    """When a job fails, cascade-fail all downstream jobs in the same pipeline."""
     if not pipeline_id:
         return
     with engine.begin() as conn:
-        next_job = conn.execute(
+        result = conn.execute(
             text(
                 """
-            SELECT id FROM pipeline_jobs
-            WHERE depends_on_id = :job_id AND pipeline_id = :pipeline_id
-            LIMIT 1
+            UPDATE pipeline_jobs
+            SET status = 'failed',
+                error_message = 'Upstream job failed',
+                completed_at = TIMEZONE('utc', CURRENT_TIMESTAMP)
+            WHERE pipeline_id = :pid
+              AND status IN ('pending', 'paused')
+              AND id != :job_id
             """
             ),
-            {"job_id": job_id, "pipeline_id": pipeline_id},
-        ).fetchone()
-    if next_job:
-        logger.info(f"Next pipeline job {next_job[0]} is now eligible")
+            {"pid": pipeline_id, "job_id": job_id},
+        )
+        if result.rowcount > 0:
+            logger.info(f"Cascade-failed {result.rowcount} downstream jobs in pipeline {pipeline_id}")
 
 
 def recover_stuck_jobs(engine):
@@ -229,6 +233,8 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
         cmd.extend(["--num_domains", str(config["num_websites"])])
     if config.get("domains_path"):
         cmd.extend(["--domains_path", config["domains_path"]])
+    if experiment_id:
+        cmd.extend(["--experiment_id", str(experiment_id)])
 
     logger.info(f"Job {job_id}: Starting crawl with cmd: {' '.join(cmd)}")
     update_job_progress(engine, job_id, {"status": "starting", "message": "Launching crawler..."})
@@ -317,9 +323,10 @@ def run_worker():
 
             if success:
                 complete_job(engine, job_id, {"status": "completed"})
-                chain_next_job(engine, job_id, pipeline_id, experiment_id)
+                logger.info(f"Job {job_id}: Pipeline {pipeline_id} - next step now eligible")
             else:
                 fail_job(engine, job_id, "Crawl process failed", logs_text)
+                cascade_fail_dependents(engine, job_id, pipeline_id)
 
         except Exception as e:
             logger.error(f"Worker loop error: {e}", exc_info=True)

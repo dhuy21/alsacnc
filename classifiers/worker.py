@@ -60,6 +60,14 @@ def ensure_tables(engine):
             """
             )
         )
+        conn.execute(
+            text(
+                """
+            CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_pending
+            ON pipeline_jobs (status, job_type) WHERE status = 'pending'
+            """
+            )
+        )
 
 
 def claim_job(engine):
@@ -93,6 +101,27 @@ def claim_job(engine):
             {"worker_id": WORKER_ID},
         ).fetchone()
         return row
+
+
+def recover_stuck_jobs(engine):
+    """Mark jobs stuck in 'running' beyond lease timeout as failed."""
+    type_filter = ", ".join(f"'{t}'" for t in JOB_TYPES)
+    with engine.begin() as conn:
+        result = conn.execute(
+            text(
+                f"""
+            UPDATE pipeline_jobs
+            SET status = 'failed',
+                error_message = 'Worker lease expired (timeout)',
+                completed_at = TIMEZONE('utc', CURRENT_TIMESTAMP)
+            WHERE status = 'running'
+              AND job_type IN ({type_filter})
+              AND started_at < TIMEZONE('utc', CURRENT_TIMESTAMP) - INTERVAL '{LEASE_TIMEOUT_SECONDS} seconds'
+            """
+            ),
+        )
+        if result.rowcount > 0:
+            logger.warning(f"Recovered {result.rowcount} stuck classifier jobs")
 
 
 def update_job_progress(engine, job_id, progress_data):
@@ -136,22 +165,27 @@ def fail_job(engine, job_id, error_msg, logs_text=None):
         )
 
 
-def chain_next_job(engine, job_id, pipeline_id):
+def cascade_fail_dependents(engine, job_id, pipeline_id):
+    """When a job fails, cascade-fail all downstream jobs in the same pipeline."""
     if not pipeline_id:
         return
     with engine.begin() as conn:
-        next_job = conn.execute(
+        result = conn.execute(
             text(
                 """
-            SELECT id, job_type FROM pipeline_jobs
-            WHERE depends_on_id = :job_id AND pipeline_id = :pipeline_id
-            LIMIT 1
+            UPDATE pipeline_jobs
+            SET status = 'failed',
+                error_message = 'Upstream job failed',
+                completed_at = TIMEZONE('utc', CURRENT_TIMESTAMP)
+            WHERE pipeline_id = :pid
+              AND status IN ('pending', 'paused')
+              AND id != :job_id
             """
             ),
-            {"job_id": job_id, "pipeline_id": pipeline_id},
-        ).fetchone()
-    if next_job:
-        logger.info(f"Next pipeline job {next_job[0]} ({next_job[1]}) is now eligible")
+            {"pid": pipeline_id, "job_id": job_id},
+        )
+        if result.rowcount > 0:
+            logger.info(f"Cascade-failed {result.rowcount} downstream jobs in pipeline {pipeline_id}")
 
 
 def execute_predict_cookies(job_id, config, experiment_id, engine):
@@ -241,8 +275,13 @@ def run_worker(shutdown_event=None):
             return shutdown_event.is_set()
         return False
 
+    recovery_counter = 0
     while not should_stop():
         try:
+            recovery_counter += 1
+            if recovery_counter % 60 == 0:
+                recover_stuck_jobs(engine)
+
             job = claim_job(engine)
             if job is None:
                 time.sleep(POLL_INTERVAL)
@@ -260,9 +299,10 @@ def run_worker(shutdown_event=None):
 
             if success:
                 complete_job(engine, job_id, {"status": "completed"})
-                chain_next_job(engine, job_id, pipeline_id)
+                logger.info(f"Job {job_id}: Pipeline {pipeline_id} - next step now eligible")
             else:
                 fail_job(engine, job_id, f"{job_type} failed", logs_text)
+                cascade_fail_dependents(engine, job_id, pipeline_id)
 
         except Exception as e:
             logger.error(f"Worker loop error: {e}", exc_info=True)

@@ -1,3 +1,5 @@
+import atexit
+import logging
 import os
 import threading
 from typing import Optional
@@ -10,6 +12,8 @@ from service_streamer import ThreadedStreamer
 from classifiers.text_classifiers.model_wrappers import IECTModelWrapper
 from shared_utils import load_yaml
 
+logger = logging.getLogger("flask_server")
+
 app = Flask(__name__)
 model = None
 streamer_ietc: Optional[ThreadedStreamer] = None
@@ -17,7 +21,8 @@ streamer_ietc: Optional[ThreadedStreamer] = None
 
 @app.route("/predict_ietc", methods=["POST"])
 def stream_predict_ietc() -> Response:
-    assert streamer_ietc is not None
+    if streamer_ietc is None:
+        return jsonify({"error": "Model not loaded yet"}), 503
     inputs = request.form.getlist("s")
     outputs = streamer_ietc.predict(inputs)
     return jsonify(outputs)
@@ -30,6 +35,14 @@ def health() -> Response:
 
 _worker_thread: Optional[threading.Thread] = None
 _worker_shutdown = threading.Event()
+
+
+def _stop_worker():
+    """Signal the worker thread to stop gracefully."""
+    _worker_shutdown.set()
+    if _worker_thread and _worker_thread.is_alive():
+        logger.info("Waiting for worker thread to stop...")
+        _worker_thread.join(timeout=10)
 
 
 def _start_worker_thread():
@@ -47,8 +60,9 @@ def _start_worker_thread():
             name="classifiers-worker",
         )
         _worker_thread.start()
+        atexit.register(_stop_worker)
     except Exception as e:
-        print(f"Warning: Could not start worker thread: {e}")
+        logger.warning(f"Could not start worker thread: {e}")
 
 
 @click.command()
