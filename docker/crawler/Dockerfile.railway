@@ -89,5 +89,6 @@ RUN wget https://zenodo.org/records/7638513/files/models.zip &&\
 # Copy project
 COPY . .
 
-# Railway: keep container alive for manual SSH command execution
-CMD ["sleep", "infinity"]
+# Railway: run crawler worker (polls pipeline_jobs, executes crawl tasks)
+# Falls back to sleep infinity if OPENWPM_STORAGE is not set
+CMD ["python", "-m", "cookie_crawler.worker"]

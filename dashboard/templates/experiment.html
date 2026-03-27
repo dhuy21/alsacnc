@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}{{ experiment.id }} - ALSACNC{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Experiment: <code>{{ experiment.id }}</code></h1>
+</div>
+
+{% if stats %}
+<section class="card">
+    <h2>Summary</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total }}</div>
+            <div class="stat-label">Total Websites</div>
+        </div>
+        <div class="stat-card stat-success">
+            <div class="stat-value">{{ stats.success }} <small>({{ stats.success_pct }}%)</small></div>
+            <div class="stat-label">Crawled Successfully</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.banners }}</div>
+            <div class="stat-label">Cookie Banners Detected</div>
+        </div>
+        <div class="stat-card stat-warning">
+            <div class="stat-value">{{ stats.tracking }}</div>
+            <div class="stat-label">Tracking Cookies Detected</div>
+        </div>
+        <div class="stat-card stat-danger">
+            <div class="stat-value">{{ stats.forced_action }}</div>
+            <div class="stat-label">Forced Action (Dark Pattern)</div>
+        </div>
+        <div class="stat-card stat-danger">
+            <div class="stat-value">{{ stats.interface_interference }}</div>
+            <div class="stat-label">Interface Interference</div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if jobs %}
+<section class="card">
+    <h2>Pipeline Jobs</h2>
+    <table class="table">
+        <thead>
+            <tr><th>ID</th><th>Type</th><th>Status</th><th>Pipeline</th><th>Started</th><th>Completed</th></tr>
+        </thead>
+        <tbody>
+            {% for job in jobs %}
+            <tr>
+                <td>{{ job.id }}</td>
+                <td><span class="badge badge-{{ job.job_type }}">{{ job.job_type }}</span></td>
+                <td><span class="status status-{{ job.status }}">{{ job.status }}</span></td>
+                <td>{% if job.pipeline_id %}<a href="/pipeline/{{ job.pipeline_id }}">{{ job.pipeline_id }}</a>{% endif %}</td>
+                <td>{{ job.started_at.strftime('%H:%M:%S') if job.started_at else '-' }}</td>
+                <td>{{ job.completed_at.strftime('%H:%M:%S') if job.completed_at else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>Websites ({{ websites | length }})</h2>
+    <table class="table table-compact">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Success</th>
+                <th>Language</th>
+                <th>Banner</th>
+                <th>Tracking</th>
+                <th>Accept</th>
+                <th>Reject</th>
+                <th>Forced Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for w in websites %}
+            <tr>
+                <td><a href="{{ w.url }}" target="_blank" rel="noopener">{{ w.name }}</a></td>
+                <td>
+                    {% if w.success == 1 %}<span class="status status-completed">Yes</span>
+                    {% elif w.success == 0 %}<span class="status status-failed">No</span>
+                    {% else %}<span class="status status-pending">-</span>{% endif %}
+                </td>
+                <td>{{ w.language or '-' }}</td>
+                <td>{{ 'Yes' if w.cookie_notice_detected else 'No' }}</td>
+                <td>{{ w.tracking_detected if w.tracking_detected is not none else '-' }}</td>
+                <td>{{ w.accept_button_detected if w.accept_button_detected is not none else '-' }}</td>
+                <td>{{ w.reject_button_detected if w.reject_button_detected is not none else '-' }}</td>
+                <td>{{ 'Yes' if w.forced_action_detected else 'No' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+{% if errors %}
+<section class="card">
+    <h2>Errors ({{ errors | length }})</h2>
+    <table class="table">
+        <thead><tr><th>Website</th><th>Error</th><th>Time</th></tr></thead>
+        <tbody>
+            {% for e in errors %}
+            <tr>
+                <td>{{ e.website_name }}</td>
+                <td>{{ e.text[:200] }}</td>
+                <td>{{ e.timestamp.strftime('%H:%M:%S') if e.timestamp else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>Run Individual Step</h2>
+    <div class="step-buttons">
+        {% for step in ['crawl', 'predict_cookies', 'predict_purposes', 'summary'] %}
+        <form method="post" action="/step/run" style="display:inline">
+            <input type="hidden" name="job_type" value="{{ step }}">
+            <input type="hidden" name="experiment_id" value="{{ experiment.id }}">
+            <button type="submit" class="btn btn-secondary">Run {{ step | replace('_', ' ') | title }}</button>
+        </form>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

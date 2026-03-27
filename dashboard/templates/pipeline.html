@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Pipeline {{ pipeline_id }} - ALSACNC{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Pipeline <code>{{ pipeline_id }}</code></h1>
+    {% if experiment_id %}
+    <a href="/experiment/{{ experiment_id }}" class="btn btn-sm">View Experiment</a>
+    {% endif %}
+</div>
+
+<section class="card">
+    <div class="pipeline-controls">
+        <form method="post" action="/pipeline/{{ pipeline_id }}/pause" style="display:inline">
+            <button type="submit" class="btn btn-secondary btn-sm">Pause</button>
+        </form>
+        <form method="post" action="/pipeline/{{ pipeline_id }}/resume" style="display:inline">
+            <button type="submit" class="btn btn-secondary btn-sm">Resume</button>
+        </form>
+        <form method="post" action="/pipeline/{{ pipeline_id }}/cancel" style="display:inline">
+            <button type="submit" class="btn btn-danger btn-sm">Cancel Remaining</button>
+        </form>
+    </div>
+
+    <div class="pipeline-steps" id="pipeline-steps">
+        {% for job in jobs %}
+        <div class="pipeline-step step-{{ job.status }}">
+            <div class="step-icon">
+                {% if job.status == 'completed' %}&#10003;
+                {% elif job.status == 'running' %}&#9654;
+                {% elif job.status == 'failed' %}&#10007;
+                {% elif job.status == 'paused' %}&#9208;
+                {% elif job.status == 'cancelled' %}&#9632;
+                {% else %}&#9679;{% endif %}
+            </div>
+            <div class="step-info">
+                <div class="step-type">{{ job.job_type | replace('_', ' ') | title }}</div>
+                <div class="step-status">{{ job.status }}</div>
+                {% if job.progress %}
+                <div class="step-progress">
+                    {% set prog = job.progress if job.progress is mapping else {} %}
+                    {{ prog.get('message', '') }}
+                </div>
+                {% endif %}
+                {% if job.error_message %}
+                <div class="step-error">{{ job.error_message[:200] }}</div>
+                {% endif %}
+                {% if job.started_at %}
+                <div class="step-time">Started: {{ job.started_at.strftime('%H:%M:%S') }}</div>
+                {% endif %}
+                {% if job.completed_at %}
+                <div class="step-time">Completed: {{ job.completed_at.strftime('%H:%M:%S') }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% if not loop.last %}
+        <div class="pipeline-arrow">&rarr;</div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</section>
+
+{% set has_active = jobs | selectattr('status', 'in', ['pending', 'running']) | list | length > 0 %}
+
+{% if not has_active %}
+<section class="card">
+    <h2>Run Individual Step</h2>
+    <p>Pipeline complete or stopped. You can run individual steps below:</p>
+    <div class="step-buttons">
+        {% for step in ['crawl', 'predict_cookies', 'predict_purposes', 'summary'] %}
+        <form method="post" action="/step/run" style="display:inline">
+            <input type="hidden" name="job_type" value="{{ step }}">
+            {% if experiment_id %}
+            <input type="hidden" name="experiment_id" value="{{ experiment_id }}">
+            {% endif %}
+            <button type="submit" class="btn btn-secondary">Run {{ step | replace('_', ' ') | title }}</button>
+        </form>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% if jobs | selectattr('logs') | list %}
+<section class="card">
+    <h2>Logs</h2>
+    {% for job in jobs %}
+    {% if job.logs %}
+    <details>
+        <summary>{{ job.job_type }} (Job #{{ job.id }})</summary>
+        <pre class="log-output">{{ job.logs }}</pre>
+    </details>
+    {% endif %}
+    {% endfor %}
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if has_active %}
+<script>
+setInterval(() => { location.reload(); }, 5000);
+</script>
+{% endif %}
+{% endblock %}

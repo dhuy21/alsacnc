@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ALSACNC Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <a href="/">ALSACNC</a>
+            <span class="nav-subtitle">Cookie Privacy Measurement</span>
+        </div>
+        <div class="nav-links">
+            <a href="/">Experiments</a>
+            <a href="/new">New Experiment</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script>
+        {% block scripts %}{% endblock %}
+    </script>
+</body>
+</html>

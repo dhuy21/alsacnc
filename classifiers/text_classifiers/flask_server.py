@@ -1,3 +1,5 @@
+import os
+import threading
 from typing import Optional
 
 import click
@@ -21,6 +23,34 @@ def stream_predict_ietc() -> Response:
     return jsonify(outputs)
 
 
+@app.route("/health", methods=["GET"])
+def health() -> Response:
+    return jsonify({"status": "ok", "worker": _worker_thread is not None and _worker_thread.is_alive()})
+
+
+_worker_thread: Optional[threading.Thread] = None
+_worker_shutdown = threading.Event()
+
+
+def _start_worker_thread():
+    """Start the classifiers worker as a background daemon thread."""
+    global _worker_thread
+    if os.environ.get("OPENWPM_STORAGE") != "postgres":
+        return
+    try:
+        from classifiers.worker import run_worker
+
+        _worker_thread = threading.Thread(
+            target=run_worker,
+            args=(_worker_shutdown,),
+            daemon=True,
+            name="classifiers-worker",
+        )
+        _worker_thread.start()
+    except Exception as e:
+        print(f"Warning: Could not start worker thread: {e}")
+
+
 @click.command()
 @click.option("--config_path", type=str)
 def main(config_path: str) -> None:
@@ -38,6 +68,8 @@ def main(config_path: str) -> None:
 
     global streamer_ietc
     streamer_ietc = ThreadedStreamer(model_ietc.predict, batch_size=8, max_latency=0.1)
+
+    _start_worker_thread()
 
     app.run(host="0.0.0.0", port=5001, debug=False)
 

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}ALSACNC Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Experiments</h1>
+    <a href="/new" class="btn btn-primary">New Experiment</a>
+</div>
+
+{% if active_jobs %}
+<section class="card">
+    <h2>Active Pipeline Jobs</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Pipeline</th>
+                <th>Progress</th>
+                <th>Started</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for job in active_jobs %}
+            <tr>
+                <td>{{ job.id }}</td>
+                <td><span class="badge badge-{{ job.job_type }}">{{ job.job_type }}</span></td>
+                <td><span class="status status-{{ job.status }}">{{ job.status }}</span></td>
+                <td>
+                    {% if job.pipeline_id %}
+                    <a href="/pipeline/{{ job.pipeline_id }}">{{ job.pipeline_id }}</a>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if job.progress %}
+                        {{ job.progress.get('message', '') if job.progress is mapping else '' }}
+                    {% endif %}
+                </td>
+                <td>{{ job.started_at.strftime('%H:%M:%S') if job.started_at else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2>All Experiments</h2>
+    {% if experiments %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Experiment ID</th>
+                <th>Date</th>
+                <th>Country</th>
+                <th>Websites</th>
+                <th>Successful</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for exp in experiments %}
+            <tr>
+                <td><a href="/experiment/{{ exp.id }}">{{ exp.id }}</a></td>
+                <td>{{ exp.timestamp.strftime('%Y-%m-%d %H:%M') if exp.timestamp else '-' }}</td>
+                <td>{{ exp.country or '-' }}</td>
+                <td>{{ exp.num_websites }}</td>
+                <td>{{ exp.num_success or 0 }}</td>
+                <td><a href="/experiment/{{ exp.id }}" class="btn btn-sm">View</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">No experiments yet. <a href="/new">Create your first experiment.</a></p>
+    {% endif %}
+</section>
+{% endblock %}

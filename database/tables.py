@@ -429,3 +429,26 @@ class Experiment(Base, CustomOperations):
     websites = relationship(
         "Website", back_populates="experiment", cascade="all, delete", uselist=True
     )
+
+
+class PipelineJob(Base, CustomOperations):
+    __tablename__ = "pipeline_jobs"
+    id = Column(Integer, primary_key=True)
+    job_type = Column(
+        String, nullable=False
+    )  # crawl, predict_cookies, predict_purposes, summary
+    status = Column(
+        String, nullable=False, default="pending"
+    )  # pending, running, completed, failed, paused, cancelled
+    config = Column(JSON, nullable=True)
+    experiment_id = Column(String, nullable=True)
+    pipeline_id = Column(String, nullable=True)
+    depends_on_id = Column(Integer, nullable=True)
+    progress = Column(JSON, nullable=True)
+    result = Column(JSON, nullable=True)
+    logs = Column(TextType, nullable=True)
+    error_message = Column(TextType, nullable=True)
+    worker_id = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=utcnow())
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
