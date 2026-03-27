@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS openwpm_task (
 );
 
 CREATE TABLE IF NOT EXISTS openwpm_crawl (
-    browser_id INTEGER PRIMARY KEY,
+    browser_id BIGINT PRIMARY KEY,
     task_id INTEGER NOT NULL,
     browser_params TEXT NOT NULL,
     start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS openwpm_crawl (
 
 CREATE TABLE IF NOT EXISTS openwpm_site_visits (
     visit_id BIGINT PRIMARY KEY,
-    browser_id INTEGER NOT NULL,
+    browser_id BIGINT NOT NULL,
     site_url VARCHAR(500) NOT NULL,
     site_rank INTEGER,
     FOREIGN KEY(browser_id) REFERENCES openwpm_crawl(browser_id)
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS openwpm_site_visits (
 
 CREATE TABLE IF NOT EXISTS openwpm_crawl_history (
     id SERIAL PRIMARY KEY,
-    browser_id INTEGER,
+    browser_id BIGINT,
     visit_id BIGINT,
     command TEXT,
     arguments TEXT,
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS openwpm_crawl_history (
 CREATE TABLE IF NOT EXISTS openwpm_http_requests (
     id SERIAL PRIMARY KEY,
     incognito INTEGER,
-    browser_id INTEGER NOT NULL,
+    browser_id BIGINT NOT NULL,
     visit_id BIGINT NOT NULL,
     extension_session_uuid TEXT,
     event_ordinal INTEGER,
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS openwpm_http_requests (
 CREATE TABLE IF NOT EXISTS openwpm_http_responses (
     id SERIAL PRIMARY KEY,
     incognito INTEGER,
-    browser_id INTEGER NOT NULL,
+    browser_id BIGINT NOT NULL,
     visit_id BIGINT NOT NULL,
     extension_session_uuid TEXT,
     event_ordinal INTEGER,
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS openwpm_http_responses (
 CREATE TABLE IF NOT EXISTS openwpm_http_redirects (
     id SERIAL PRIMARY KEY,
     incognito INTEGER,
-    browser_id INTEGER NOT NULL,
+    browser_id BIGINT NOT NULL,
     visit_id BIGINT NOT NULL,
     old_request_url TEXT,
     old_request_id TEXT,
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS openwpm_http_redirects (
 CREATE TABLE IF NOT EXISTS openwpm_javascript (
     id SERIAL PRIMARY KEY,
     incognito INTEGER,
-    browser_id INTEGER NOT NULL,
+    browser_id BIGINT NOT NULL,
     visit_id BIGINT NOT NULL,
     extension_session_uuid TEXT,
     event_ordinal INTEGER,
@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS openwpm_javascript (
 
 CREATE TABLE IF NOT EXISTS openwpm_javascript_cookies (
     id SERIAL PRIMARY KEY,
-    browser_id INTEGER NOT NULL,
+    browser_id BIGINT NOT NULL,
     visit_id BIGINT NOT NULL,
     extension_session_uuid TEXT,
     event_ordinal INTEGER,
@@ -189,7 +189,7 @@ CREATE TABLE IF NOT EXISTS openwpm_javascript_cookies (
 CREATE TABLE IF NOT EXISTS openwpm_navigations (
     id SERIAL PRIMARY KEY,
     incognito INTEGER,
-    browser_id INTEGER NOT NULL,
+    browser_id BIGINT NOT NULL,
     visit_id BIGINT NOT NULL,
     extension_session_uuid TEXT,
     process_id INTEGER,
@@ -216,8 +216,8 @@ CREATE TABLE IF NOT EXISTS openwpm_navigations (
 
 CREATE TABLE IF NOT EXISTS openwpm_callstacks (
     id SERIAL PRIMARY KEY,
-    request_id INTEGER NOT NULL,
-    browser_id INTEGER NOT NULL,
+    request_id BIGINT NOT NULL,
+    browser_id BIGINT NOT NULL,
     visit_id BIGINT NOT NULL,
     call_stack TEXT
 );
@@ -228,8 +228,8 @@ CREATE TABLE IF NOT EXISTS openwpm_incomplete_visits (
 
 CREATE TABLE IF NOT EXISTS openwpm_dns_responses (
     id SERIAL PRIMARY KEY,
-    request_id INTEGER NOT NULL,
-    browser_id INTEGER NOT NULL,
+    request_id BIGINT NOT NULL,
+    browser_id BIGINT NOT NULL,
     visit_id BIGINT NOT NULL,
     hostname TEXT,
     addresses TEXT,
