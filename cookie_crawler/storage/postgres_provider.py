@@ -267,9 +267,15 @@ class PostgresStorageProvider(StructuredStorageProvider):
         statement, args = self._generate_insert(pg_table, record)
         try:
             with self.conn.cursor() as cur:
+                cur.execute("SAVEPOINT sp_record")
                 cur.execute(statement, args)
+                cur.execute("RELEASE SAVEPOINT sp_record")
         except Exception as e:
-            self.conn.rollback()
+            try:
+                with self.conn.cursor() as cur:
+                    cur.execute("ROLLBACK TO SAVEPOINT sp_record")
+            except Exception:
+                self.conn.rollback()
             logger.error(
                 "PostgresStorageProvider unsupported record:\n%s\n%s\n%s",
                 e, statement, repr(args),
