@@ -271,7 +271,7 @@ async def new_experiment_form(request: Request):
 
 
 VALID_JOB_TYPES = {"crawl", "predict_cookies", "predict_purposes", "summary"}
-VALID_NUM_WEBSITES = {3, 10, 100, 1000, 10000}
+VALID_NUM_WEBSITES = {3, 10, 50, 100, 500, 1000, 10000, 50000}
 STEP_DEPS = {"predict_cookies": "crawl", "predict_purposes": "predict_cookies", "summary": "predict_purposes"}
 
 
