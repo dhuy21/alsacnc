@@ -8,8 +8,9 @@
 </div>
 
 {% if stats %}
+{# ── Section 1: Crawl Overview ── #}
 <section class="card">
-    <h2>Summary</h2>
+    <h2>Crawl Overview</h2>
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-value">{{ stats.total }}</div>
@@ -25,24 +26,91 @@
         </div>
         <div class="stat-card">
             <div class="stat-value">{{ stats.banners }}</div>
-            <div class="stat-label">Cookie Banners</div>
+            <div class="stat-label">Cookie Notices</div>
         </div>
-        <div class="stat-card stat-warning">
-            <div class="stat-value">{{ stats.tracking }}</div>
-            <div class="stat-label">Tracking Cookies Detected</div>
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.cmp }}</div>
+            <div class="stat-label">CMP Detected</div>
         </div>
+    </div>
+</section>
+
+{# ── Section 2: Banner Interaction Detection ── #}
+<section class="card">
+    <h2>Banner Interaction Detection</h2>
+    <table class="table table-summary">
+        <tbody>
+            <tr><td>Accept button detected</td><td><strong>{{ stats.accept }}</strong></td></tr>
+            <tr><td>Reject button detected</td><td><strong>{{ stats.reject }}</strong></td></tr>
+            <tr><td>Close button detected</td><td><strong>{{ stats.close }}</strong></td></tr>
+            <tr><td>Save button detected</td><td><strong>{{ stats.save }}</strong></td></tr>
+            <tr><td>Accept button without reject button</td><td><strong>{{ stats.accept_no_reject }}</strong></td></tr>
+            <tr><td>Mentions legitimate interest</td><td><strong>{{ stats.legit_interest }}</strong></td></tr>
+            <tr><td>Mentions legitimate interest (initial text)</td><td><strong>{{ stats.legit_interest_initial }}</strong></td></tr>
+        </tbody>
+    </table>
+</section>
+
+{# ── Section 3: Dark Patterns ── #}
+<section class="card">
+    <h2>Dark Patterns Detected</h2>
+    <div class="stats-grid">
         <div class="stat-card stat-danger">
             <div class="stat-value">{{ stats.forced_action }}</div>
-            <div class="stat-label">Forced Action (Dark Pattern)</div>
+            <div class="stat-label">Forced Action</div>
+        </div>
+        <div class="stat-card stat-danger">
+            <div class="stat-value">{{ stats.nagging }}</div>
+            <div class="stat-label">Nagging</div>
         </div>
         <div class="stat-card stat-danger">
             <div class="stat-value">{{ stats.interface_interference }}</div>
             <div class="stat-label">Interface Interference</div>
         </div>
+        <div class="stat-card stat-danger">
+            <div class="stat-value">{{ stats.obstruction }}</div>
+            <div class="stat-label">Obstruction</div>
+        </div>
     </div>
+</section>
+
+{# ── Section 4: Cookie Predictions (after predict_cookies) ── #}
+{% if stats.has_tracking %}
+<section class="card">
+    <h2>Cookie Predictions (CookieBlock)</h2>
+    <table class="table table-summary">
+        <tbody>
+            <tr><td>Websites with tracking cookies detected</td><td><strong>{{ stats.tracking }}</strong></td></tr>
+            <tr><td>Tracking prior to interaction</td><td><strong>{{ stats.tracking_prior }}</strong></td></tr>
+            <tr><td>Tracking after reject</td><td><strong>{{ stats.tracking_after_reject }}</strong></td></tr>
+            <tr><td>Tracking after close</td><td><strong>{{ stats.tracking_after_close }}</strong></td></tr>
+            <tr><td>Tracking after save</td><td><strong>{{ stats.tracking_after_save }}</strong></td></tr>
+        </tbody>
+    </table>
+    {% if prediction_counts.cookies_total > 0 %}
+    <p class="section-desc">{{ prediction_counts.cookies_total }} cookies analyzed, {{ prediction_counts.cookies_tracking }} classified as tracking (Analytics/Advertising).</p>
+    {% endif %}
 </section>
 {% endif %}
 
+{# ── Section 5: Purpose Predictions (after predict_purposes) ── #}
+{% if stats.has_purposes %}
+<section class="card">
+    <h2>Purpose Predictions (BERT)</h2>
+    <table class="table table-summary">
+        <tbody>
+            <tr><td>Websites with tracking purposes detected</td><td><strong>{{ stats.purposes }}</strong></td></tr>
+            <tr><td>Tracking purposes in initial text</td><td><strong>{{ stats.purposes_initial }}</strong></td></tr>
+        </tbody>
+    </table>
+    {% if prediction_counts.purposes_total > 0 %}
+    <p class="section-desc">{{ prediction_counts.purposes_total }} sentences analyzed, {{ prediction_counts.purposes_detected }} with AA purpose detected.</p>
+    {% endif %}
+</section>
+{% endif %}
+{% endif %}
+
+{# ── Pipeline Jobs ── #}
 {% if jobs %}
 <section class="card">
     <h2>Pipeline Jobs</h2>
@@ -66,19 +134,28 @@
 </section>
 {% endif %}
 
+{# ── Per-Website Detail Table ── #}
 <section class="card">
     <h2>Websites ({{ websites | length }})</h2>
+    <div class="table-scroll">
     <table class="table table-compact">
         <thead>
             <tr>
                 <th>Name</th>
-                <th>Success</th>
-                <th>Language</th>
-                <th>Banner</th>
-                <th>Tracking</th>
+                <th>OK</th>
+                <th>Lang</th>
+                <th>Notice</th>
+                <th>CMP</th>
                 <th>Accept</th>
                 <th>Reject</th>
-                <th>Forced Action</th>
+                <th>Close</th>
+                <th>Save</th>
+                <th>Tracking</th>
+                <th>Forced</th>
+                <th>Nagging</th>
+                <th>Interf.</th>
+                <th>Obstruct.</th>
+                <th>Purposes</th>
             </tr>
         </thead>
         <tbody>
@@ -95,16 +172,25 @@
                 </td>
                 <td>{{ w.language or '-' }}</td>
                 <td>{{ 'Yes' if w.cookie_notice_detected else ('No' if w.cookie_notice_detected is not none else '-') }}</td>
-                <td>{{ w.tracking_detected if w.tracking_detected is not none else '-' }}</td>
+                <td>{{ 'Yes' if w.cmp_detected else ('No' if w.cmp_detected is not none else '-') }}</td>
                 <td>{{ w.accept_button_detected if w.accept_button_detected is not none else '-' }}</td>
                 <td>{{ w.reject_button_detected if w.reject_button_detected is not none else '-' }}</td>
+                <td>{{ w.close_button_detected if w.close_button_detected is not none else '-' }}</td>
+                <td>{{ w.save_button_detected if w.save_button_detected is not none else '-' }}</td>
+                <td>{{ w.tracking_detected if w.tracking_detected is not none else '-' }}</td>
                 <td>{{ 'Yes' if w.forced_action_detected else ('No' if w.forced_action_detected is not none else '-') }}</td>
+                <td>{{ 'Yes' if w.nagging_detected else ('No' if w.nagging_detected is not none else '-') }}</td>
+                <td>{{ 'Yes' if w.interface_interference_detected else ('No' if w.interface_interference_detected is not none else '-') }}</td>
+                <td>{{ 'Yes' if w.obstruction_detected else ('No' if w.obstruction_detected is not none else '-') }}</td>
+                <td>{{ w.tracking_purposes_detected if w.tracking_purposes_detected is not none else '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </section>
 
+{# ── Errors ── #}
 {% if errors %}
 <section class="card">
     <h2>Errors ({{ errors | length }})</h2>
@@ -123,6 +209,7 @@
 </section>
 {% endif %}
 
+{# ── Run Individual Step (step-by-step mode only) ── #}
 {% if not is_full_pipeline %}
 <section class="card">
     <h2>Run Individual Step</h2>

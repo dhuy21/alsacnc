@@ -18,42 +18,49 @@
     <p class="empty-state">No data available for this experiment. Run the pipeline first.</p>
 </section>
 {% else %}
+{% set ns = namespace(sec=1) %}
 
-{# ── Section 1: Crawl Overview ── #}
+{# ── Crawl Overview ── #}
 <section class="card">
-    <h2>1. Crawl Overview</h2>
-    <div class="stats-grid stats-grid-5">
-        <div class="stat-card">
-            <div class="stat-value">{{ overview.total }}</div>
-            <div class="stat-label">Total Websites</div>
-        </div>
-        <div class="stat-card stat-success">
-            <div class="stat-value">{{ overview.supported }}</div>
-            <div class="stat-label">Supported Language</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ overview.errors }}</div>
-            <div class="stat-label">With Errors (excluded)</div>
-        </div>
-        <div class="stat-card stat-success">
-            <div class="stat-value">{{ overview.analyzed }}</div>
-            <div class="stat-label">Analyzed</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value">{{ overview.cookie_notices }} <small>({{ overview.cookie_notices_pct }}%)</small></div>
-            <div class="stat-label">Cookie Notices Detected</div>
-        </div>
-    </div>
+    <h2>{{ ns.sec }}. Crawl Overview</h2>
+    {% set ns.sec = ns.sec + 1 %}
+    <table class="table table-summary">
+        <tbody>
+            <tr>
+                <td>Number of websites with logged entries</td>
+                <td><strong>{{ overview.total }}</strong></td>
+            </tr>
+            <tr>
+                <td>Number of websites with an unsupported language</td>
+                <td><strong>{{ overview.unsupported_ratio }}</strong></td>
+            </tr>
+            <tr>
+                <td>Number of websites with a supported language</td>
+                <td><strong>{{ overview.supported_ratio }}</strong></td>
+            </tr>
+            <tr>
+                <td>Number of websites crawled successfully</td>
+                <td><strong>{{ overview.analyzed_ratio }}</strong></td>
+            </tr>
+            <tr>
+                <td>Number of websites with cookie notices with at least one violation</td>
+                <td><strong>{{ overview.violations_cn_ratio }}</strong></td>
+            </tr>
+            <tr>
+                <td>Number of websites with at least one violation</td>
+                <td><strong>{{ overview.violations_total_ratio }}</strong></td>
+            </tr>
+        </tbody>
+    </table>
 </section>
 
-{# ── Section 2: Violations & Dark Patterns Chart ── #}
+{# ── Violations & Dark Patterns Chart ── #}
 <section class="card">
-    <h2>2. Observed Violations and Dark Patterns</h2>
+    <h2>{{ ns.sec }}. Observed Violations and Dark Patterns</h2>
+    {% set ns.sec = ns.sec + 1 %}
     <p class="section-desc">
-        Of the {{ overview.analyzed }} analyzed websites,
-        <strong>{{ overview.with_violations }} ({{ overview.violations_pct }}%)</strong>
-        exhibited at least one potential violation.
         Red bars indicate privacy violations; orange bars indicate dark patterns.
+        Each bar shows count/applicable (percentage).
     </p>
     {% if violations_chart %}
     <div class="chart-container">{{ violations_chart | safe }}</div>
@@ -62,9 +69,10 @@
     {% endif %}
 </section>
 
-{# ── Section 3: Violations Data Table ── #}
+{# ── Detailed Breakdown Table ── #}
 <section class="card">
-    <h2>3. Detailed Breakdown</h2>
+    <h2>{{ ns.sec }}. Detailed Breakdown</h2>
+    {% set ns.sec = ns.sec + 1 %}
     <table class="table">
         <thead>
             <tr>
@@ -95,26 +103,55 @@
     </table>
 </section>
 
-{# ── Section 4: Rank-based Analysis ── #}
+{# ── Rank-based Analysis ── #}
 {% if rank_chart %}
 <section class="card">
-    <h2>4. Compliance by Website Popularity</h2>
+    <h2>{{ ns.sec }}. Compliance by Website Popularity</h2>
+    {% set ns.sec = ns.sec + 1 %}
     <p class="section-desc">
-        Violations broken down by CrUX popularity rank.
+        Violations and dark patterns broken down by CrUX popularity rank.
         Higher-ranked websites may show different compliance patterns.
     </p>
     <div class="chart-container">{{ rank_chart | safe }}</div>
 </section>
 {% endif %}
 
-{# ── Section 5: Cookie Predictions ── #}
+{# ── CMP-based Analysis ── #}
+{% if cmp_rows %}
 <section class="card">
-    <h2>{% if rank_chart %}5{% else %}4{% endif %}. Cookie Classification (CookieBlock Model)</h2>
+    <h2>{{ ns.sec }}. CMP-based Analysis (Comparison with Prior Work)</h2>
+    {% set ns.sec = ns.sec + 1 %}
+    <p class="section-desc">
+        Violation and dark pattern rates broken down by Consent Management Platform (CMP),
+        following the methodology of Bollinger et al. and Nouwens et al.
+    </p>
+    <table class="table">
+        <thead>
+            <tr><th>CMP Group</th><th>Websites</th><th>Metric</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+            {% for row in cmp_rows %}
+            <tr>
+                <td>{{ row.group }}</td>
+                <td>{{ row.count }}</td>
+                <td>{{ row.metric }}</td>
+                <td><strong>{{ row.value }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+{# ── Cookie Predictions ── #}
+<section class="card">
+    <h2>{{ ns.sec }}. Cookie Classification (CookieBlock Model)</h2>
+    {% set ns.sec = ns.sec + 1 %}
     {% if cookies_chart %}
     <p class="section-desc">
         Classification of {{ overview.total_cookies }} observed cookies
         into Necessary/Functional vs. Analytics/Advertising categories
-        using the CookieBlock model (threshold τ={{ threshold }}).
+        using the CookieBlock model (threshold &tau;={{ threshold }}).
     </p>
     <div class="chart-container chart-container-sm">{{ cookies_chart | safe }}</div>
     {% else %}
@@ -125,9 +162,9 @@
     {% endif %}
 </section>
 
-{# ── Section 6: Purpose Predictions ── #}
+{# ── Purpose Predictions ── #}
 <section class="card">
-    <h2>{% if rank_chart %}6{% else %}5{% endif %}. Declared Purpose Detection (BERT Model)</h2>
+    <h2>{{ ns.sec }}. Declared Purpose Detection (BERT Model)</h2>
     {% if purposes_chart %}
     <p class="section-desc">
         Purpose detection results on {{ overview.total_sentences }} sentences

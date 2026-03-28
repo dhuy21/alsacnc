@@ -110,6 +110,10 @@ body {
 }
 .table th { color: var(--text-dim); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
 .table-compact td { padding: 0.4rem 0.5rem; font-size: 0.8rem; }
+.table-scroll { overflow-x: auto; }
+.table-compact td:first-child { white-space: nowrap; }
+.table-summary td:first-child { width: 65%; }
+.table-summary td:last-child { text-align: right; font-family: 'SF Mono', 'Fira Code', monospace; }
 .table a { color: var(--primary); text-decoration: none; }
 .table a:hover { text-decoration: underline; }
 

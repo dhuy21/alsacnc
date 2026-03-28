@@ -188,8 +188,21 @@ async def experiment_detail(request: Request, experiment_id: str):
         """
         SELECT w.id, w.name, w.url, w.success, w.language, w.crux_rank,
                cr.cookie_notice_detected, cr.tracking_detected,
-               cr.forced_action_detected, cr.interface_interference_detected,
-               cr.accept_button_detected, cr.reject_button_detected
+               cr.tracking_detected_prior_to_interaction,
+               cr.tracking_detected_after_reject,
+               cr.tracking_detected_after_close,
+               cr.tracking_detected_after_save,
+               cr.accept_button_detected, cr.reject_button_detected,
+               cr.close_button_detected, cr.save_button_detected,
+               cr.accept_button_detected_without_reject_button,
+               cr.cmp_detected,
+               cr.forced_action_detected, cr.nagging_detected,
+               cr.interface_interference_detected, cr.obstruction_detected,
+               cr.mentions_legitimate_interest,
+               cr.mentions_legitimate_interest_in_initial_text,
+               cr.tracking_purposes_detected,
+               cr.tracking_purposes_detected_in_initial_text,
+               cr.interaction_depth
         FROM websites w
         LEFT JOIN crawl_results cr ON cr.website_id = w.id
         WHERE w.experiment_id = :eid
@@ -221,6 +234,7 @@ async def experiment_detail(request: Request, experiment_id: str):
     error_names = {e.website_name for e in errors}
     stats = _compute_stats(websites, error_names)
     is_full_pipeline = any(getattr(j, "depends_on_id", None) is not None for j in jobs)
+    prediction_counts = _get_prediction_counts(experiment_id)
 
     return templates.TemplateResponse(
         request=request,
@@ -233,8 +247,12 @@ async def experiment_detail(request: Request, experiment_id: str):
             "jobs": jobs,
             "stats": stats,
             "is_full_pipeline": is_full_pipeline,
+            "prediction_counts": prediction_counts,
         },
     )
+
+
+_TRACKING_T = 2  # CookieBlock threshold, matches crawl_summary.py
 
 
 def _compute_stats(websites, error_names=None):
@@ -244,23 +262,88 @@ def _compute_stats(websites, error_names=None):
         return {}
     crawled = sum(1 for w in websites if w.success == 1)
     analyzed = [w for w in websites if w.success == 1 and w.name not in error_names]
-    analyzed_count = len(analyzed)
-    banners = sum(1 for w in analyzed if w.cookie_notice_detected)
-    tracking = sum(1 for w in analyzed if w.tracking_detected and w.tracking_detected >= 2)
+    ac = len(analyzed)
+
+    banners = sum(1 for w in analyzed if w.cookie_notice_detected and w.cookie_notice_detected >= 1)
+    cmp = sum(1 for w in analyzed if w.cmp_detected)
+    accept = sum(1 for w in analyzed if w.accept_button_detected and w.accept_button_detected >= 1)
+    reject = sum(1 for w in analyzed if w.reject_button_detected and w.reject_button_detected >= 1)
+    close = sum(1 for w in analyzed if w.close_button_detected and w.close_button_detected >= 1)
+    save = sum(1 for w in analyzed if w.save_button_detected and w.save_button_detected >= 1)
+    accept_no_reject = sum(1 for w in analyzed if w.accept_button_detected_without_reject_button)
+    legit = sum(1 for w in analyzed if w.mentions_legitimate_interest)
+    legit_init = sum(1 for w in analyzed if w.mentions_legitimate_interest_in_initial_text)
+
     forced = sum(1 for w in analyzed if w.forced_action_detected)
+    nagging = sum(1 for w in analyzed if w.nagging_detected)
     interference = sum(1 for w in analyzed if w.interface_interference_detected)
+    obstruction = sum(1 for w in analyzed if w.obstruction_detected)
+
+    T = _TRACKING_T
+    has_tracking = any(w.tracking_detected is not None for w in analyzed)
+    tracking = sum(1 for w in analyzed if w.tracking_detected is not None and w.tracking_detected >= T)
+    t_prior = sum(1 for w in analyzed if w.tracking_detected_prior_to_interaction is not None and w.tracking_detected_prior_to_interaction >= T)
+    t_reject = sum(1 for w in analyzed if w.tracking_detected_after_reject is not None and w.tracking_detected_after_reject >= T)
+    t_close = sum(1 for w in analyzed if w.tracking_detected_after_close is not None and w.tracking_detected_after_close >= T)
+    t_save = sum(1 for w in analyzed if w.tracking_detected_after_save is not None and w.tracking_detected_after_save >= T)
+
+    has_purposes = any(w.tracking_purposes_detected is not None for w in analyzed)
+    purposes = sum(1 for w in analyzed if w.tracking_purposes_detected is not None and w.tracking_purposes_detected >= 1)
+    purposes_init = sum(1 for w in analyzed if w.tracking_purposes_detected_in_initial_text is not None and w.tracking_purposes_detected_in_initial_text >= 1)
 
     return {
         "total": total,
-        "crawled": crawled,
-        "crawled_pct": round(100 * crawled / total, 1) if total else 0,
-        "analyzed": analyzed_count,
-        "analyzed_pct": round(100 * analyzed_count / total, 1) if total else 0,
-        "banners": banners,
-        "tracking": tracking,
-        "forced_action": forced,
-        "interface_interference": interference,
+        "crawled": crawled, "crawled_pct": round(100 * crawled / total, 1) if total else 0,
+        "analyzed": ac, "analyzed_pct": round(100 * ac / total, 1) if total else 0,
+        "banners": banners, "cmp": cmp,
+        "accept": accept, "reject": reject, "close": close, "save": save,
+        "accept_no_reject": accept_no_reject,
+        "legit_interest": legit, "legit_interest_initial": legit_init,
+        "forced_action": forced, "nagging": nagging,
+        "interface_interference": interference, "obstruction": obstruction,
+        "has_tracking": has_tracking,
+        "tracking": tracking, "tracking_prior": t_prior,
+        "tracking_after_reject": t_reject, "tracking_after_close": t_close, "tracking_after_save": t_save,
+        "has_purposes": has_purposes,
+        "purposes": purposes, "purposes_initial": purposes_init,
     }
+
+
+def _get_prediction_counts(experiment_id):
+    counts = {
+        "cookies_total": 0, "cookies_tracking": 0,
+        "purposes_total": 0, "purposes_detected": 0,
+    }
+    try:
+        row = query_one(
+            """SELECT COUNT(*) AS total,
+                      COALESCE(SUM(CASE WHEN cp.classification = 1 THEN 1 ELSE 0 END), 0) AS tracking
+               FROM cookies_with_predictions cp
+               JOIN websites w ON w.id = cp.website_id
+               WHERE w.experiment_id = :eid""",
+            {"eid": experiment_id},
+        )
+        if row:
+            counts["cookies_total"] = row.total or 0
+            counts["cookies_tracking"] = int(row.tracking or 0)
+    except Exception:
+        pass
+    try:
+        row = query_one(
+            """SELECT COUNT(*) AS total,
+                      COALESCE(SUM(CASE WHEN pp.purpose_detected = 1 THEN 1 ELSE 0 END), 0) AS detected
+               FROM purpose_predictions pp
+               JOIN cb_text t ON t.id = pp.sentence_id
+               JOIN websites w ON w.id = t.website_id
+               WHERE w.experiment_id = :eid""",
+            {"eid": experiment_id},
+        )
+        if row:
+            counts["purposes_total"] = row.total or 0
+            counts["purposes_detected"] = int(row.detected or 0)
+    except Exception:
+        pass
+    return counts
 
 
 @app.get("/new", response_class=HTMLResponse)

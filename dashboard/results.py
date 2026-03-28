@@ -7,6 +7,7 @@ crawl_summary.py (same thresholds, same filters, same logic).
 """
 
 import io
+import json
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -229,8 +230,16 @@ def compute_dark_patterns(cr: pd.DataFrame) -> Dict[str, Tuple[int, int, float]]
     return r
 
 
-def _count_websites_with_any_violation(cr: pd.DataFrame) -> int:
-    """Count unique websites that have at least one violation (same set as crawl_summary)."""
+def _count_websites_with_any_violation(
+    cr: pd.DataFrame, *, include_missing_notice: bool = True,
+) -> int:
+    """Count unique websites that have at least one violation.
+
+    In crawl_summary.py, ``violations_with_cookie_notices`` is computed
+    **before** ``missing_notice`` is added to the set, so its numerator
+    excludes ``missing_notice``.  Pass ``include_missing_notice=False``
+    to reproduce that exact count.
+    """
     if cr.empty:
         return 0
     T = COOKIEBLOCK_THRESHOLD
@@ -241,8 +250,11 @@ def _count_websites_with_any_violation(cr: pd.DataFrame) -> int:
         cr["tracking_detected_after_save"] >= T,
         cr["tracking_detected_prior_to_interaction"] >= T,
         (cr["tracking_detected"] > T) & (cr["tracking_purposes_detected_in_initial_text"] == 0),
-        (cr["cookie_notice_detected"] == False) & (cr["tracking_detected"] >= T),
     ]
+    if include_missing_notice:
+        masks.append(
+            (cr["cookie_notice_detected"] == False) & (cr["tracking_detected"] >= T)
+        )
     names: set = set()
     for m in masks:
         names.update(cr.loc[m, "name"].tolist())
@@ -315,24 +327,23 @@ def build_violations_chart(
 
 
 def build_rank_chart(cr: pd.DataFrame) -> Optional[str]:
-    if cr.empty or cr["crux_rank"].dropna().nunique() < 2:
+    if cr.empty or cr["crux_rank"].dropna().nunique() == 0:
         return None
 
     ranks = sorted(cr["crux_rank"].dropna().unique().astype(int))
     palette = ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#ec4899"]
 
-    keys = [
-        "missing_notice", "missing_reject",
-        "AA_cookies_detected_after_reject",
-        "AA_cookies_detected_prior_to_interaction",
-        "undeclared_purposes",
-    ]
-    labels = [VIOLATION_LABELS[k] for k in keys]
+    all_labels = {**VIOLATION_LABELS, **DARK_PATTERN_LABELS}
+    keys = list(VIOLATION_LABELS.keys()) + list(DARK_PATTERN_LABELS.keys())
+    labels = [all_labels[k] for k in keys]
 
     fig = go.Figure()
     for i, rank in enumerate(ranks):
-        v = compute_violations(cr[cr["crux_rank"] == rank])
-        pcts = [v.get(k, (0, 0, 0))[2] for k in keys]
+        subset = cr[cr["crux_rank"] == rank]
+        v = compute_violations(subset)
+        dp = compute_dark_patterns(subset)
+        merged = {**v, **dp}
+        pcts = [merged.get(k, (0, 0, 0))[2] for k in keys]
         fig.add_trace(go.Bar(
             y=labels, x=pcts, name=f"Rank {rank:,}", orientation="h",
             marker_color=palette[i % len(palette)],
@@ -404,6 +415,99 @@ def build_purposes_chart(purpose_agg: Dict) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# CMP-based analysis  (mirrors crawl_summary.py lines 250-302)
+# ---------------------------------------------------------------------------
+
+def _parse_cmp(x):
+    if isinstance(x, str):
+        try:
+            x = json.loads(x)
+        except (json.JSONDecodeError, TypeError):
+            return [], False
+    if not isinstance(x, dict):
+        return [], False
+    consentomatic = x.get("consentomatic") or []
+    tcfapi = x.get("tcfapi")
+    uses_tcf = isinstance(tcfapi, dict) and "cmpId" in tcfapi
+    return consentomatic, uses_tcf
+
+
+def _filter_cmps(cr: pd.DataFrame, cmps: List[str]) -> pd.DataFrame:
+    return cr[cr["_consentomatic"].apply(lambda x: bool(set(x) & set(cmps)))]
+
+
+def _fmt(v: Optional[Tuple[int, int, float]]) -> str:
+    if v is None:
+        return "0/0"
+    count, base, pct = v
+    return f"{count}/{base} ({pct}%)" if base > 0 else f"{count}/0"
+
+
+def compute_cmp_analysis(cr: pd.DataFrame) -> List[Dict[str, str]]:
+    """CMP-based analysis matching crawl_summary.py lines 250-302."""
+    if cr.empty or "cmp" not in cr.columns:
+        return []
+
+    cr = cr.copy()
+    parsed = cr["cmp"].apply(_parse_cmp)
+    cr["_consentomatic"] = parsed.apply(lambda x: x[0])
+    cr["_uses_tcf_iab"] = parsed.apply(lambda x: x[1])
+
+    rows: List[Dict[str, str]] = []
+
+    tcf = cr[cr["_uses_tcf_iab"]]
+    tcf_v = compute_violations(tcf) if not tcf.empty else {}
+    rows.append({
+        "group": "Websites using TCF IAB",
+        "count": len(tcf),
+        "metric": "Ignored reject",
+        "value": _fmt(tcf_v.get("AA_cookies_detected_after_reject")),
+    })
+    rows.append({
+        "group": "Websites using TCF IAB",
+        "count": len(tcf),
+        "metric": "Implicit consent prior to interaction",
+        "value": _fmt(tcf_v.get("AA_cookies_detected_prior_to_interaction")),
+    })
+
+    bollinger = _filter_cmps(cr, ["onetrust", "cookiebot", "termly"])
+    b_v = compute_violations(bollinger) if not bollinger.empty else {}
+    rows.append({
+        "group": "Bollinger et al. (Cookiebot + OneTrust + Termly)",
+        "count": len(bollinger),
+        "metric": "Implicit consent prior to interaction",
+        "value": _fmt(b_v.get("AA_cookies_detected_prior_to_interaction")),
+    })
+
+    cookiebot_only = _filter_cmps(cr, ["cookiebot"])
+    cb_v = compute_violations(cookiebot_only) if not cookiebot_only.empty else {}
+    rows.append({
+        "group": "Bollinger et al. (Cookiebot only)",
+        "count": len(cookiebot_only),
+        "metric": "Ignored reject",
+        "value": _fmt(cb_v.get("AA_cookies_detected_after_reject")),
+    })
+
+    nouwens = _filter_cmps(cr, ["onetrust", "cookiebot", "crownpeak", "trustarc", "quantcast"])
+    n_v = compute_violations(nouwens) if not nouwens.empty else {}
+    n_dp = compute_dark_patterns(nouwens) if not nouwens.empty else {}
+    rows.append({
+        "group": "Nouwens et al. (Cookiebot + OneTrust + Crownpeak + Quantcast + Trustarc)",
+        "count": len(nouwens),
+        "metric": "Implicit consent prior to interaction",
+        "value": _fmt(n_v.get("AA_cookies_detected_prior_to_interaction")),
+    })
+    rows.append({
+        "group": "Nouwens et al. (Cookiebot + OneTrust + Crownpeak + Quantcast + Trustarc)",
+        "count": len(nouwens),
+        "metric": "Forced action",
+        "value": _fmt(n_dp.get("forced_action")),
+    })
+
+    return rows
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -421,23 +525,41 @@ def generate_results(
     violations = compute_violations(cr)
     dark_patterns = compute_dark_patterns(cr)
 
-    cookie_notices = int(cr["cookie_notice_detected"].sum()) if not cr.empty else 0
+    cookie_notices = int(len(cr[cr["cookie_notice_detected"] >= 1])) if not cr.empty else 0
+    total = data["total"]
     analyzed = data["analyzed_count"]
-    n_with_violations = _count_websites_with_any_violation(cr)
+    supported = data["supported_count"]
+    unsupported = data["unsupported_count"]
+    n_total = _count_websites_with_any_violation(cr, include_missing_notice=True)
+    n_excl_mn = _count_websites_with_any_violation(cr, include_missing_notice=False)
+
+    def _ratio(val: int, base: int) -> str:
+        if base > 0:
+            return f"{val}/{base} ({round(val / base * 100, 1)}%)"
+        return f"{val}/0"
 
     overview = {
-        "total": data["total"],
-        "supported": data["supported_count"],
-        "unsupported": data["unsupported_count"],
+        "total": total,
+        "supported": supported,
+        "supported_ratio": _ratio(supported, total),
+        "unsupported": unsupported,
+        "unsupported_ratio": _ratio(unsupported, total),
         "no_language": data["no_language_count"],
         "analyzed": analyzed,
+        "analyzed_ratio": _ratio(analyzed, supported),
         "errors": data["error_count"],
         "cookie_notices": cookie_notices,
         "cookie_notices_pct": round(100 * cookie_notices / analyzed, 1) if analyzed > 0 else 0,
-        "with_violations": n_with_violations,
+        "with_violations": n_total,
+        "violations_total_ratio": _ratio(n_total, analyzed),
         "violations_pct": round(
-            100 * n_with_violations / analyzed, 1
+            100 * n_total / analyzed, 1
         ) if analyzed > 0 else 0,
+        "violations_with_cn": n_excl_mn,
+        "violations_cn_ratio": _ratio(n_excl_mn, cookie_notices),
+        "violations_with_cn_pct": round(
+            100 * n_excl_mn / cookie_notices, 1
+        ) if cookie_notices > 0 else 0,
         "total_cookies": sum(data.get("cookie_agg", {}).values()),
         "total_sentences": sum(data.get("purpose_agg", {}).values()),
     }
@@ -453,12 +575,15 @@ def generate_results(
         table_rows.append({"key": key, "label": all_labels.get(key, key),
                            "count": count, "base": base, "pct": pct, "type": "dark_pattern"})
 
+    cmp_rows = compute_cmp_analysis(cr)
+
     result: Dict[str, Any] = {
         "empty": False,
         "overview": overview,
         "violations": violations,
         "dark_patterns": dark_patterns,
         "table_rows": table_rows,
+        "cmp_rows": cmp_rows,
     }
 
     if include_charts:
@@ -473,15 +598,24 @@ def generate_results(
 
 
 def results_to_csv(engine: Engine, experiment_id: str) -> str:
-    """Generate CSV export of violations and dark patterns."""
+    """Generate CSV export of violations, dark patterns, and CMP analysis."""
     res = generate_results(engine, experiment_id, include_charts=False)
     if res.get("empty"):
         return ""
     buf = io.StringIO()
+
     rows = res.get("table_rows", [])
     df = pd.DataFrame(rows)
     if not df.empty:
         df = df[["type", "label", "count", "base", "pct"]]
         df.columns = ["Type", "Violation", "Count", "Base", "Percentage"]
     df.to_csv(buf, index=False)
+
+    cmp = res.get("cmp_rows", [])
+    if cmp:
+        buf.write("\n")
+        cmp_df = pd.DataFrame(cmp)
+        cmp_df.columns = ["CMP Group", "Websites", "Metric", "Result"]
+        cmp_df.to_csv(buf, index=False)
+
     return buf.getvalue()
