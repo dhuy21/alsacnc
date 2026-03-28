@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY dashboard/ dashboard/
 COPY database/ database/
 COPY shared_utils/ shared_utils/
+COPY cookie_crawler/crawl_summary.py cookie_crawler/
 
 ENV PYTHONPATH=/opt/app
 

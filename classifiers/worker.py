@@ -1,6 +1,6 @@
 """
-Classifiers worker: polls pipeline_jobs for predict_cookies, predict_purposes,
-and summary tasks, then executes them as subprocesses.
+Classifiers worker: polls pipeline_jobs for predict_cookies and predict_purposes
+tasks, then executes them as subprocesses.
 Runs as a background thread alongside the Flask IETC server.
 """
 
@@ -26,7 +26,7 @@ logger = logging.getLogger("classifiers_worker")
 POLL_INTERVAL = 5
 LEASE_TIMEOUT_SECONDS = 7200
 WORKER_ID = f"classifiers-{os.getenv('HOSTNAME', os.getpid())}"
-JOB_TYPES = ("predict_cookies", "predict_purposes", "summary")
+JOB_TYPES = ("predict_cookies", "predict_purposes")
 
 
 def get_engine():
@@ -214,17 +214,6 @@ def execute_predict_purposes(job_id, config, experiment_id, engine):
     return _run_subprocess(cmd, job_id, engine, cwd="/opt/repo")
 
 
-def execute_summary(job_id, config, experiment_id, engine):
-    cmd = ["python", "-m", "cookie_crawler.crawl_summary"]
-    if experiment_id:
-        cmd.extend(["--experiment_id", experiment_id])
-
-    logger.info(f"Job {job_id}: Running crawl_summary")
-    update_job_progress(engine, job_id, {"status": "running", "message": "Generating summary..."})
-
-    return _run_subprocess(cmd, job_id, engine, cwd="/opt/repo")
-
-
 def _run_subprocess(cmd, job_id, engine, cwd=None):
     proc = None
     try:
@@ -267,7 +256,6 @@ def _run_subprocess(cmd, job_id, engine, cwd=None):
 EXECUTORS = {
     "predict_cookies": execute_predict_cookies,
     "predict_purposes": execute_predict_purposes,
-    "summary": execute_summary,
 }
 
 

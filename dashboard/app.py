@@ -8,8 +8,11 @@ Provides:
 - Results visualization (violations, dark patterns)
 """
 
+import atexit
 import json
+import logging
 import os
+import threading
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,6 +24,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
+
+logger = logging.getLogger("dashboard")
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -75,10 +80,42 @@ def ensure_tables():
         )
 
 
+_summary_thread: Optional[threading.Thread] = None
+_summary_shutdown = threading.Event()
+
+
+def _start_summary_worker():
+    global _summary_thread
+    if os.environ.get("OPENWPM_STORAGE") != "postgres":
+        return
+    try:
+        from dashboard.summary_worker import run_worker
+
+        _summary_thread = threading.Thread(
+            target=run_worker,
+            args=(_summary_shutdown,),
+            daemon=True,
+            name="summary-worker",
+        )
+        _summary_thread.start()
+        atexit.register(_stop_summary_worker)
+    except Exception as e:
+        logger.warning(f"Could not start summary worker thread: {e}")
+
+
+def _stop_summary_worker():
+    _summary_shutdown.set()
+    if _summary_thread and _summary_thread.is_alive():
+        logger.info("Waiting for summary worker thread to stop...")
+        _summary_thread.join(timeout=10)
+
+
 @asynccontextmanager
 async def lifespan(a):
     ensure_tables()
+    _start_summary_worker()
     yield
+    _stop_summary_worker()
 
 
 app = FastAPI(title="ALSACNC Dashboard", lifespan=lifespan)
