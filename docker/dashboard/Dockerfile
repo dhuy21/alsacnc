@@ -9,6 +9,7 @@ COPY dashboard/ dashboard/
 COPY database/ database/
 COPY shared_utils/ shared_utils/
 COPY cookie_crawler/crawl_summary.py cookie_crawler/
+RUN touch cookie_crawler/__init__.py
 
 ENV PYTHONPATH=/opt/app
 

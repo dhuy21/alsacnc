@@ -8,7 +8,6 @@ Provides:
 - Results visualization (violations, dark patterns)
 """
 
-import atexit
 import json
 import logging
 import os
@@ -86,7 +85,8 @@ _summary_shutdown = threading.Event()
 
 def _start_summary_worker():
     global _summary_thread
-    if os.environ.get("OPENWPM_STORAGE") != "postgres":
+    if not os.environ.get("DB_HOST"):
+        logger.info("DB_HOST not set, summary worker not started")
         return
     try:
         from dashboard.summary_worker import run_worker
@@ -98,7 +98,6 @@ def _start_summary_worker():
             name="summary-worker",
         )
         _summary_thread.start()
-        atexit.register(_stop_summary_worker)
     except Exception as e:
         logger.warning(f"Could not start summary worker thread: {e}")
 
@@ -453,7 +452,10 @@ async def api_experiments():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "summary_worker": _summary_thread is not None and _summary_thread.is_alive(),
+    }
 
 
 if __name__ == "__main__":

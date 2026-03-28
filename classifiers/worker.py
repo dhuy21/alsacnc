@@ -11,7 +11,6 @@ import signal
 import subprocess
 import sys
 import threading
-import time
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
