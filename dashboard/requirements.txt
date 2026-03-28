@@ -4,6 +4,7 @@ jinja2>=3.1.2
 python-multipart>=0.0.6
 psycopg2-binary==2.9.5
 sqlalchemy==1.4.45
+numpy<2.0
 pandas==1.5.3
 click==8.0.4
 pyyaml~=6.0
