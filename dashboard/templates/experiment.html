@@ -4,6 +4,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Experiment: <code>{{ experiment.id }}</code></h1>
+    <a href="/experiment/{{ experiment.id }}/results" class="btn btn-primary">View Research Results</a>
 </div>
 
 {% if stats %}

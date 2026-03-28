@@ -8,3 +8,4 @@ numpy<2.0
 pandas==1.5.3
 click==8.0.4
 pyyaml~=6.0
+plotly==5.22.0

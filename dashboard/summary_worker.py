@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
@@ -23,6 +24,7 @@ logger = logging.getLogger("summary_worker")
 
 POLL_INTERVAL = 5
 LEASE_TIMEOUT_SECONDS = 3600
+LOG_FLUSH_INTERVAL = 10
 WORKER_ID = f"summary-{os.getenv('HOSTNAME', os.getpid())}"
 
 
@@ -142,7 +144,18 @@ def _cascade_fail_dependents(engine, job_id, pipeline_id):
             logger.info(f"Cascade-failed {result.rowcount} downstream jobs in pipeline {pipeline_id}")
 
 
-def _run_subprocess(cmd, job_id):
+def _flush_logs(engine, job_id, log_lines):
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE pipeline_jobs SET logs = :logs WHERE id = :id"),
+                {"logs": "\n".join(log_lines[-100:]), "id": job_id},
+            )
+    except Exception:
+        pass
+
+
+def _run_subprocess(cmd, job_id, engine):
     proc = None
     try:
         proc = subprocess.Popen(
@@ -153,6 +166,7 @@ def _run_subprocess(cmd, job_id):
             env={**os.environ},
         )
         log_lines = []
+        last_flush = time.time()
         for line in proc.stdout:
             line = line.rstrip()
             log_lines.append(line)
@@ -160,8 +174,13 @@ def _run_subprocess(cmd, job_id):
                 log_lines = log_lines[-200:]
             logger.info(f"Job {job_id}: {line}")
 
+            if time.time() - last_flush >= LOG_FLUSH_INTERVAL:
+                _flush_logs(engine, job_id, log_lines)
+                last_flush = time.time()
+
         proc.wait()
         logs_text = "\n".join(log_lines[-100:])
+        _flush_logs(engine, job_id, log_lines)
 
         if proc.returncode == 0:
             logger.info(f"Job {job_id}: Summary completed successfully")
@@ -213,7 +232,7 @@ def run_worker(shutdown_event=None):
             if experiment_id:
                 cmd.extend(["--experiment_id", experiment_id])
 
-            success, logs_text = _run_subprocess(cmd, job_id)
+            success, logs_text = _run_subprocess(cmd, job_id, engine)
 
             if success:
                 _complete_job(engine, job_id, {"status": "completed"})

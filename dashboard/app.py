@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
@@ -418,7 +418,7 @@ async def run_single_step(
 @app.get("/api/pipeline/{pipeline_id}/status")
 async def api_pipeline_status(pipeline_id: str):
     jobs = query_all(
-        "SELECT id, job_type, status, progress, error_message, started_at, completed_at FROM pipeline_jobs WHERE pipeline_id = :pid ORDER BY created_at",
+        "SELECT id, job_type, status, progress, error_message, experiment_id, started_at, completed_at FROM pipeline_jobs WHERE pipeline_id = :pid ORDER BY created_at",
         {"pid": pipeline_id},
     )
     return [
@@ -428,6 +428,7 @@ async def api_pipeline_status(pipeline_id: str):
             "status": j.status,
             "progress": j.progress,
             "error_message": j.error_message,
+            "experiment_id": j.experiment_id,
             "started_at": str(j.started_at) if j.started_at else None,
             "completed_at": str(j.completed_at) if j.completed_at else None,
         }
@@ -448,6 +449,55 @@ async def api_experiments():
         """
     )
     return [{"id": r.id, "timestamp": str(r.timestamp), "num_websites": r.num_websites} for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Research Results
+# ---------------------------------------------------------------------------
+
+@app.get("/experiment/{experiment_id}/results", response_class=HTMLResponse)
+async def experiment_results(request: Request, experiment_id: str):
+    from dashboard.results import COOKIEBLOCK_THRESHOLD, generate_results
+
+    res = generate_results(get_engine(), experiment_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="results.html",
+        context={
+            "experiment_id": experiment_id,
+            "threshold": COOKIEBLOCK_THRESHOLD,
+            **res,
+        },
+    )
+
+
+@app.get("/experiment/{experiment_id}/results/csv")
+async def experiment_results_csv(experiment_id: str):
+    from dashboard.results import results_to_csv
+
+    csv_str = results_to_csv(get_engine(), experiment_id)
+    if not csv_str:
+        return HTMLResponse("No data available for this experiment", status_code=404)
+    return PlainTextResponse(
+        content=csv_str,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=results_{experiment_id}.csv"},
+    )
+
+
+@app.get("/api/jobs/{job_id}/logs")
+async def api_job_logs(job_id: int):
+    row = query_one(
+        "SELECT logs, status, progress FROM pipeline_jobs WHERE id = :id",
+        {"id": job_id},
+    )
+    if not row:
+        return {"logs": "", "status": "unknown"}
+    return {
+        "logs": row.logs or "",
+        "status": row.status,
+        "progress": row.progress,
+    }
 
 
 @app.get("/health")

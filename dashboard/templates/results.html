@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Results: {{ experiment_id }} - ALSACNC{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Research Results</h1>
+    <div class="header-actions">
+        <a href="/experiment/{{ experiment_id }}" class="btn btn-secondary btn-sm">Back to Experiment</a>
+        <a href="/experiment/{{ experiment_id }}/results/csv" class="btn btn-secondary btn-sm">Download CSV</a>
+        <button onclick="window.print()" class="btn btn-secondary btn-sm">Export PDF</button>
+    </div>
+</div>
+
+<p class="results-experiment-id">Experiment: <code>{{ experiment_id }}</code></p>
+
+{% if empty %}
+<section class="card">
+    <p class="empty-state">No data available for this experiment. Run the pipeline first.</p>
+</section>
+{% else %}
+
+{# ── Section 1: Crawl Overview ── #}
+<section class="card">
+    <h2>1. Crawl Overview</h2>
+    <div class="stats-grid stats-grid-5">
+        <div class="stat-card">
+            <div class="stat-value">{{ overview.total }}</div>
+            <div class="stat-label">Total Websites</div>
+        </div>
+        <div class="stat-card stat-success">
+            <div class="stat-value">{{ overview.supported }}</div>
+            <div class="stat-label">Supported Language</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ overview.errors }}</div>
+            <div class="stat-label">With Errors (excluded)</div>
+        </div>
+        <div class="stat-card stat-success">
+            <div class="stat-value">{{ overview.analyzed }}</div>
+            <div class="stat-label">Analyzed</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ overview.cookie_notices }} <small>({{ overview.cookie_notices_pct }}%)</small></div>
+            <div class="stat-label">Cookie Notices Detected</div>
+        </div>
+    </div>
+</section>
+
+{# ── Section 2: Violations & Dark Patterns Chart ── #}
+<section class="card">
+    <h2>2. Observed Violations and Dark Patterns</h2>
+    <p class="section-desc">
+        Of the {{ overview.analyzed }} analyzed websites,
+        <strong>{{ overview.with_violations }} ({{ overview.violations_pct }}%)</strong>
+        exhibited at least one potential violation.
+        Red bars indicate privacy violations; orange bars indicate dark patterns.
+    </p>
+    {% if violations_chart %}
+    <div class="chart-container">{{ violations_chart | safe }}</div>
+    {% else %}
+    <p class="empty-state">Insufficient data to compute violations. Ensure predictions have been run.</p>
+    {% endif %}
+</section>
+
+{# ── Section 3: Violations Data Table ── #}
+<section class="card">
+    <h2>3. Detailed Breakdown</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Violation / Dark Pattern</th>
+                <th>Count</th>
+                <th>Applicable</th>
+                <th>Percentage</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in table_rows %}
+            <tr>
+                <td>
+                    {% if row.type == 'dark_pattern' %}
+                    <span class="badge" style="background:#7c2d12;color:#fb923c">Dark Pattern</span>
+                    {% else %}
+                    <span class="badge" style="background:#450a0a;color:#ef4444">Violation</span>
+                    {% endif %}
+                </td>
+                <td>{{ row.label }}</td>
+                <td>{{ row.count }}</td>
+                <td>{{ row.base }}</td>
+                <td><strong>{{ row.pct }}%</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+{# ── Section 4: Rank-based Analysis ── #}
+{% if rank_chart %}
+<section class="card">
+    <h2>4. Compliance by Website Popularity</h2>
+    <p class="section-desc">
+        Violations broken down by CrUX popularity rank.
+        Higher-ranked websites may show different compliance patterns.
+    </p>
+    <div class="chart-container">{{ rank_chart | safe }}</div>
+</section>
+{% endif %}
+
+{# ── Section 5: Cookie Predictions ── #}
+<section class="card">
+    <h2>{% if rank_chart %}5{% else %}4{% endif %}. Cookie Classification (CookieBlock Model)</h2>
+    {% if cookies_chart %}
+    <p class="section-desc">
+        Classification of {{ overview.total_cookies }} observed cookies
+        into Necessary/Functional vs. Analytics/Advertising categories
+        using the CookieBlock model (threshold τ={{ threshold }}).
+    </p>
+    <div class="chart-container chart-container-sm">{{ cookies_chart | safe }}</div>
+    {% else %}
+    <p class="empty-state">
+        Cookie predictions not yet available.
+        Run the <strong>Predict Cookies</strong> step first.
+    </p>
+    {% endif %}
+</section>
+
+{# ── Section 6: Purpose Predictions ── #}
+<section class="card">
+    <h2>{% if rank_chart %}6{% else %}5{% endif %}. Declared Purpose Detection (BERT Model)</h2>
+    {% if purposes_chart %}
+    <p class="section-desc">
+        Purpose detection results on {{ overview.total_sentences }} sentences
+        extracted from cookie notice texts.
+        Sentences declaring Analytics/Advertising purposes are labeled "AA Purpose Declared."
+    </p>
+    <div class="chart-container chart-container-sm">{{ purposes_chart | safe }}</div>
+    {% else %}
+    <p class="empty-state">
+        Purpose predictions not yet available.
+        Run the <strong>Predict Purposes</strong> step first.
+    </p>
+    {% endif %}
+</section>
+
+{% endif %}{# end if empty #}
+{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js" charset="utf-8"></script>
+{% endblock %}

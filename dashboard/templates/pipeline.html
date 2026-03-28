@@ -4,9 +4,10 @@
 {% block content %}
 <div class="page-header">
     <h1>Pipeline <code>{{ pipeline_id }}</code></h1>
-    {% if experiment_id %}
-    <a href="/experiment/{{ experiment_id }}" class="btn btn-sm">View Experiment</a>
-    {% endif %}
+    <div class="header-actions">
+        <a href="/experiment/{{ experiment_id or '' }}" class="btn btn-sm" id="btn-experiment" {% if not experiment_id %}style="display:none"{% endif %}>View Experiment</a>
+        <a href="/experiment/{{ experiment_id or '' }}/results" class="btn btn-primary btn-sm" id="btn-results" style="display:none">View Results</a>
+    </div>
 </div>
 
 <section class="card">
@@ -33,7 +34,7 @@
 
     <div class="pipeline-steps" id="pipeline-steps">
         {% for job in jobs %}
-        <div class="pipeline-step step-{{ job.status }}">
+        <div class="pipeline-step step-{{ job.status }}" id="step-{{ job.id }}" data-job-id="{{ job.id }}">
             <div class="step-icon">
                 {% if job.status == 'completed' %}&#10003;
                 {% elif job.status == 'running' %}&#9654;
@@ -69,6 +70,21 @@
     </div>
 </section>
 
+{# ── Live Log Viewer ── #}
+<section class="card" id="log-section">
+    <h2>Live Logs</h2>
+    <div id="log-tabs" class="log-tabs">
+        {% for job in jobs %}
+        <button class="log-tab {% if loop.first %}active{% endif %}"
+                data-job-id="{{ job.id }}"
+                onclick="switchLogTab({{ job.id }})">
+            {{ job.job_type | replace('_', ' ') | title }} (#{{ job.id }})
+        </button>
+        {% endfor %}
+    </div>
+    <pre class="log-output log-live" id="log-viewer">Select a job tab to view logs...</pre>
+</section>
+
 {% set has_active = jobs | selectattr('status', 'in', ['pending', 'running']) | list | length > 0 %}
 
 {% if not has_active %}
@@ -88,26 +104,122 @@
     </div>
 </section>
 {% endif %}
-
-{% if jobs | selectattr('logs') | list %}
-<section class="card">
-    <h2>Logs</h2>
-    {% for job in jobs %}
-    {% if job.logs %}
-    <details>
-        <summary>{{ job.job_type }} (Job #{{ job.id }})</summary>
-        <pre class="log-output">{{ job.logs }}</pre>
-    </details>
-    {% endif %}
-    {% endfor %}
-</section>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
-{% if has_active %}
 <script>
-setInterval(() => { location.reload(); }, 5000);
+(function() {
+    const PIPELINE_ID = "{{ pipeline_id }}";
+    const POLL_MS = 4000;
+    const ICONS = {completed: "\u2713", running: "\u25B6", failed: "\u2717", paused: "\u23F8", cancelled: "\u25A0", pending: "\u25CF"};
+    let activeJobId = null;
+    let polling = true;
+    let logCache = {};
+    let knownExperimentId = {{ experiment_id | tojson }};
+
+    function switchLogTab(jobId) {
+        activeJobId = jobId;
+        document.querySelectorAll('.log-tab').forEach(t => t.classList.remove('active'));
+        const btn = document.querySelector(`.log-tab[data-job-id="${jobId}"]`);
+        if (btn) btn.classList.add('active');
+        fetchLogs(jobId);
+    }
+    window.switchLogTab = switchLogTab;
+
+    async function fetchLogs(jobId) {
+        try {
+            const res = await fetch(`/api/jobs/${jobId}/logs`);
+            const data = await res.json();
+            logCache[jobId] = data.logs || "(no output yet)";
+            if (activeJobId === jobId) {
+                const el = document.getElementById('log-viewer');
+                el.textContent = logCache[jobId];
+                el.scrollTop = el.scrollHeight;
+            }
+        } catch (e) {}
+    }
+
+    async function pollStatus() {
+        if (!polling) return;
+        try {
+            const res = await fetch(`/api/pipeline/${PIPELINE_ID}/status`);
+            const jobs = await res.json();
+            let anyActive = false;
+            jobs.forEach(j => {
+                const step = document.getElementById(`step-${j.id}`);
+                if (!step) return;
+                step.className = `pipeline-step step-${j.status}`;
+                const info = step.querySelector('.step-info');
+                const icon = step.querySelector('.step-icon');
+                if (icon) icon.textContent = ICONS[j.status] || ICONS.pending;
+                const statusEl = step.querySelector('.step-status');
+                if (statusEl) statusEl.textContent = j.status;
+                const progEl = step.querySelector('.step-progress');
+                if (j.progress && j.progress.message) {
+                    if (!progEl) {
+                        const d = document.createElement('div');
+                        d.className = 'step-progress';
+                        d.textContent = j.progress.message;
+                        info.appendChild(d);
+                    } else {
+                        progEl.textContent = j.progress.message;
+                    }
+                }
+                let errEl = step.querySelector('.step-error');
+                if (j.error_message) {
+                    if (!errEl) { errEl = document.createElement('div'); errEl.className = 'step-error'; info.appendChild(errEl); }
+                    errEl.textContent = j.error_message.substring(0, 200);
+                } else if (errEl) { errEl.remove(); }
+                if (j.status === 'running' || j.status === 'pending') anyActive = true;
+            });
+
+            if (!knownExperimentId) {
+                for (const j of jobs) {
+                    if (j.experiment_id) {
+                        knownExperimentId = j.experiment_id;
+                        const btnExp = document.getElementById('btn-experiment');
+                        const btnRes = document.getElementById('btn-results');
+                        if (btnExp) { btnExp.href = `/experiment/${knownExperimentId}`; btnExp.style.display = ''; }
+                        if (btnRes) { btnRes.href = `/experiment/${knownExperimentId}/results`; }
+                        break;
+                    }
+                }
+            }
+
+            if (activeJobId) fetchLogs(activeJobId);
+
+            const btnResults = document.getElementById('btn-results');
+            if (btnResults && knownExperimentId && !anyActive) btnResults.style.display = '';
+
+            if (!anyActive) {
+                polling = false;
+                return;
+            }
+        } catch(e) {}
+        setTimeout(pollStatus, POLL_MS);
+    }
+
+    // Auto-select the first running (or first) job
+    const steps = document.querySelectorAll('.pipeline-step');
+    let picked = false;
+    steps.forEach(s => {
+        if (!picked && s.classList.contains('step-running')) {
+            switchLogTab(parseInt(s.dataset.jobId));
+            picked = true;
+        }
+    });
+    if (!picked && steps.length > 0) {
+        switchLogTab(parseInt(steps[0].dataset.jobId));
+    }
+
+    {% if has_active %}
+    setTimeout(pollStatus, POLL_MS);
+    {% else %}
+    if (knownExperimentId) {
+        const btnResults = document.getElementById('btn-results');
+        if (btnResults) btnResults.style.display = '';
+    }
+    {% endif %}
+})();
 </script>
-{% endif %}
 {% endblock %}

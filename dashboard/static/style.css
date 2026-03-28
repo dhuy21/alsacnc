@@ -273,3 +273,45 @@ details summary {
     color: var(--text-dim);
 }
 .empty-state a { color: var(--primary); }
+
+/* ── Results page ── */
+.results-experiment-id { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1.25rem; }
+.results-experiment-id code { color: var(--primary); }
+.section-desc { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 1rem; line-height: 1.6; }
+.chart-container { width: 100%; overflow-x: auto; }
+.chart-container-sm { max-width: 520px; margin: 0 auto; }
+.stats-grid-5 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.header-actions { display: flex; gap: 0.5rem; align-items: center; }
+
+/* ── Log tabs ── */
+.log-tabs { display: flex; gap: 0.25rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.log-tab {
+    padding: 0.35rem 0.75rem; font-size: 0.8rem;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text-dim); cursor: pointer; transition: all 0.2s;
+}
+.log-tab:hover { border-color: var(--text-dim); }
+.log-tab.active { border-color: var(--primary); color: var(--primary); background: #1e1b4b; }
+.log-live { min-height: 120px; max-height: 400px; }
+
+/* ── Print-friendly styles ── */
+@media print {
+    body { background: #fff; color: #111; }
+    .navbar, .header-actions, .pipeline-controls, .step-buttons, .log-tabs,
+    #log-section, .btn { display: none !important; }
+    .card { background: #fff; border: 1px solid #ccc; page-break-inside: avoid; }
+    .card h2 { color: #111; }
+    .stat-card { background: #f9f9f9; border-color: #ccc; }
+    .stat-value { color: #111 !important; }
+    .stat-label, .section-desc, .results-experiment-id { color: #555; }
+    .table th, .table td { border-color: #ccc; color: #111; }
+    .badge { border: 1px solid #999; }
+    .container { max-width: 100%; padding: 0; }
+    .chart-container { overflow: visible; }
+    .chart-container text { fill: #111 !important; }
+    .chart-container .gtitle { fill: #111 !important; }
+    .chart-container .xtitle, .chart-container .ytitle { fill: #333 !important; }
+    .chart-container .xtick text, .chart-container .ytick text { fill: #333 !important; }
+    .chart-container .legendtext { fill: #111 !important; }
+    .js-plotly-plot .plotly .main-svg { background: #fff !important; }
+}

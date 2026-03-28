@@ -23,6 +23,7 @@ logger = logging.getLogger("crawler_worker")
 
 POLL_INTERVAL = 5
 LEASE_TIMEOUT_SECONDS = 7200  # 2 hours: mark stuck jobs as failed
+LOG_FLUSH_INTERVAL = 10
 WORKER_ID = f"crawler-{os.getenv('HOSTNAME', os.getpid())}"
 
 
@@ -216,6 +217,17 @@ def _propagate_experiment_id(engine, pipeline_id, experiment_id):
     logger.info(f"Propagated experiment_id={experiment_id} to pipeline {pipeline_id}")
 
 
+def _flush_logs(engine, job_id, log_lines):
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE pipeline_jobs SET logs = :logs WHERE id = :id"),
+                {"logs": "\n".join(log_lines[-100:]), "id": job_id},
+            )
+    except Exception:
+        pass
+
+
 def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
     """Execute crawl as subprocess and monitor progress."""
     config = config or {}
@@ -253,6 +265,7 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
         )
 
         log_lines = []
+        last_flush = time.time()
         for line in proc.stdout:
             line = line.rstrip()
             log_lines.append(line)
@@ -271,8 +284,13 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
                     "message": line,
                 })
 
+            if time.time() - last_flush >= LOG_FLUSH_INTERVAL:
+                _flush_logs(engine, job_id, log_lines)
+                last_flush = time.time()
+
         proc.wait()
         logs_text = "\n".join(log_lines[-100:])
+        _flush_logs(engine, job_id, log_lines)
 
         if proc.returncode == 0:
             logger.info(f"Job {job_id}: Crawl completed successfully")
