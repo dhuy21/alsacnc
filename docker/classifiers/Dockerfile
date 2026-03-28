@@ -7,7 +7,8 @@ RUN mkdir repo
 WORKDIR /opt/repo
 COPY requirements requirements
 RUN pip install -r requirements/shared_requirements.txt
-RUN pip install -r requirements/ml_requirements.txt
+RUN pip install torch==1.13.1+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip install --default-timeout=300 -r requirements/ml_requirements.txt
 
 ENV PYTHONPATH /opt/repo
 
