@@ -262,6 +262,7 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
             text=True,
             cwd="/opt/crawler",
             env={**os.environ},
+            start_new_session=True,
         )
 
         log_lines = []
@@ -289,6 +290,12 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
                 last_flush = time.time()
 
         proc.wait()
+
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except (ProcessLookupError, OSError):
+            pass
+
         logs_text = "\n".join(log_lines[-100:])
         _flush_logs(engine, job_id, log_lines)
 
@@ -309,9 +316,14 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
         logger.error(f"Job {job_id}: Crawl exception: {e}")
         return False, str(e)
     finally:
-        if proc and proc.poll() is None:
-            proc.kill()
-            proc.wait()
+        if proc:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except (ProcessLookupError, OSError):
+                pass
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
 
 
 def run_worker():

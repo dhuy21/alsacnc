@@ -220,6 +220,7 @@ async def experiment_detail(request: Request, experiment_id: str):
 
     error_names = {e.website_name for e in errors}
     stats = _compute_stats(websites, error_names)
+    is_full_pipeline = any(getattr(j, "depends_on_id", None) is not None for j in jobs)
 
     return templates.TemplateResponse(
         request=request,
@@ -231,6 +232,7 @@ async def experiment_detail(request: Request, experiment_id: str):
             "error_names": error_names,
             "jobs": jobs,
             "stats": stats,
+            "is_full_pipeline": is_full_pipeline,
         },
     )
 
@@ -270,6 +272,7 @@ async def new_experiment_form(request: Request):
 
 VALID_JOB_TYPES = {"crawl", "predict_cookies", "predict_purposes", "summary"}
 VALID_NUM_WEBSITES = {3, 10, 100, 1000, 10000}
+STEP_DEPS = {"predict_cookies": "crawl", "predict_purposes": "predict_cookies", "summary": "predict_purposes"}
 
 
 @app.post("/new")
@@ -281,8 +284,8 @@ async def create_experiment(
 ):
     if num_websites not in VALID_NUM_WEBSITES:
         return HTMLResponse("Invalid number of websites", status_code=400)
-    if num_browsers < 1 or num_browsers > 5:
-        return HTMLResponse("Invalid number of browsers", status_code=400)
+    if num_browsers < 1 or num_browsers > 3:
+        return HTMLResponse("Invalid number of browsers (max 3 on Railway)", status_code=400)
     if mode not in ("full", "step"):
         return HTMLResponse("Invalid mode", status_code=400)
 
@@ -393,13 +396,37 @@ async def run_single_step(
 ):
     if job_type not in VALID_JOB_TYPES:
         return HTMLResponse("Invalid job type", status_code=400)
-    if num_browsers < 1 or num_browsers > 5:
-        return HTMLResponse("Invalid number of browsers", status_code=400)
+    if num_browsers < 1 or num_browsers > 3:
+        return HTMLResponse("Invalid number of browsers (max 3 on Railway)", status_code=400)
 
     if experiment_id and job_type != "crawl":
         exists = query_one("SELECT id FROM experiments WHERE id = :id", {"id": experiment_id})
         if not exists:
             return HTMLResponse("Experiment not found", status_code=404)
+
+    if experiment_id:
+        is_full = query_one(
+            "SELECT 1 FROM pipeline_jobs WHERE experiment_id = :eid AND depends_on_id IS NOT NULL LIMIT 1",
+            {"eid": experiment_id},
+        )
+        if is_full:
+            return HTMLResponse("Full pipeline mode: steps are managed automatically", status_code=409)
+
+        already = query_one(
+            "SELECT id FROM pipeline_jobs WHERE experiment_id = :eid AND job_type = :jtype AND status IN ('pending', 'running', 'completed', 'paused') LIMIT 1",
+            {"eid": experiment_id, "jtype": job_type},
+        )
+        if already:
+            return HTMLResponse(f"Step '{job_type}' has already been run for this experiment", status_code=409)
+
+        dep = STEP_DEPS.get(job_type)
+        if dep:
+            dep_done = query_one(
+                "SELECT 1 FROM pipeline_jobs WHERE experiment_id = :eid AND job_type = :jtype AND status = 'completed' LIMIT 1",
+                {"eid": experiment_id, "jtype": dep},
+            )
+            if not dep_done:
+                return HTMLResponse(f"Cannot run '{job_type}': prerequisite step '{dep}' must complete first", status_code=409)
 
     pipeline_id = str(uuid.uuid4())[:8]
     config = {}

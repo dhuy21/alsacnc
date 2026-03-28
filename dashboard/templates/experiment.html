@@ -123,13 +123,17 @@
 </section>
 {% endif %}
 
+{% if not is_full_pipeline %}
 <section class="card">
     <h2>Run Individual Step</h2>
     <div class="step-buttons">
+        {% set ns = namespace(prev_completed=true) %}
         {% for step in ['crawl', 'predict_cookies', 'predict_purposes', 'summary'] %}
         {% set step_jobs = jobs | selectattr('job_type', 'equalto', step) | list %}
+        {% set step_pending = step_jobs | selectattr('status', 'equalto', 'pending') | list | length > 0 %}
         {% set step_running = step_jobs | selectattr('status', 'equalto', 'running') | list | length > 0 %}
         {% set step_completed = step_jobs | selectattr('status', 'equalto', 'completed') | list | length > 0 %}
+        {% set step_paused = step_jobs | selectattr('status', 'equalto', 'paused') | list | length > 0 %}
         <form method="post" action="/step/run" style="display:inline"
               onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Submitting...';">
             <input type="hidden" name="job_type" value="{{ step }}">
@@ -137,12 +141,20 @@
             {% if step_running %}
             <button type="button" class="btn btn-secondary" disabled>{{ step | replace('_', ' ') | title }} (running...)</button>
             {% elif step_completed %}
-            <button type="submit" class="btn btn-secondary" title="Re-run this step">{{ step | replace('_', ' ') | title }} &#10003;</button>
+            <button type="button" class="btn btn-secondary" disabled>{{ step | replace('_', ' ') | title }} &#10003;</button>
+            {% elif step_pending %}
+            <button type="button" class="btn btn-secondary" disabled>{{ step | replace('_', ' ') | title }} (pending)</button>
+            {% elif step_paused %}
+            <button type="button" class="btn btn-secondary" disabled>{{ step | replace('_', ' ') | title }} (paused)</button>
+            {% elif not ns.prev_completed %}
+            <button type="button" class="btn btn-secondary" disabled>{{ step | replace('_', ' ') | title }}</button>
             {% else %}
             <button type="submit" class="btn btn-secondary">Run {{ step | replace('_', ' ') | title }}</button>
             {% endif %}
         </form>
+        {% set ns.prev_completed = step_completed %}
         {% endfor %}
     </div>
 </section>
+{% endif %}
 {% endblock %}
