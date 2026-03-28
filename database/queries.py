@@ -166,14 +166,14 @@ def get_table(
         if filter_expr is not None:
             query = query.filter(filter_expr)
 
-        if return_df:
-            df = pd.read_sql(query.statement, session.bind)
-            return df
+    if return_df:
+        df = pd.read_sql(query.statement, query.session.bind)
+        return df
 
-        entries = []
-        for entry in query:
-            entries.append(entry.to_dict())
-        return entries
+    entries = []
+    for entry in query:
+        entries.append(entry.to_dict())
+    return entries
 
 
 def get_and_postprocess_table(
