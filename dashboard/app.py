@@ -281,7 +281,7 @@ async def create_experiment(
 ):
     if num_websites not in VALID_NUM_WEBSITES:
         return HTMLResponse("Invalid number of websites", status_code=400)
-    if num_browsers < 1 or num_browsers > 10:
+    if num_browsers < 1 or num_browsers > 5:
         return HTMLResponse("Invalid number of browsers", status_code=400)
     if mode not in ("full", "step"):
         return HTMLResponse("Invalid mode", status_code=400)
@@ -393,6 +393,8 @@ async def run_single_step(
 ):
     if job_type not in VALID_JOB_TYPES:
         return HTMLResponse("Invalid job type", status_code=400)
+    if num_browsers < 1 or num_browsers > 5:
+        return HTMLResponse("Invalid number of browsers", status_code=400)
 
     if experiment_id and job_type != "crawl":
         exists = query_one("SELECT id FROM experiments WHERE id = :id", {"id": experiment_id})
