@@ -1,9 +1,7 @@
-# Railway deployment config — Phase 1 test
+# Railway deployment config
 # Identical to experiment_config.yaml except:
-#   - num_browsers: 1 (single browser for cost efficiency)
+#   - num_browsers: 1 (single browser, overridden by dashboard)
 #   - ietc_model_url: points to classifiers service on Railway internal network
-#   - domains_source: list (use custom test domains)
-#   - domains_path: domains/test_domains.csv
 
 # General config
 engine: postgres
@@ -42,8 +40,10 @@ detect_cmp:
 
 domains_config:
     domains_source: crux
-    domains_path: domains/crux_202303_eu_uk_top_10000_N_10000.csv
-    countries: ["de"]
+    domains_path: null
+    countries: [
+      "us", "gb", "fr", "de", "ie", "at", "nl", "pl", "es", "se", "ch"
+    ]
     countries_desc: "eu_uk"
     crux_date: "202303"
     maximum_rank: 10000
