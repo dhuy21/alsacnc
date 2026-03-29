@@ -41,10 +41,10 @@ detect_cmp:
     detect_cmp_methods: ["consentomatic", "tcfapi"]
 
 domains_config:
-    domains_source: list
-    domains_path: domains/test_domains.csv
+    domains_source: crux
+    domains_path: domains/crux_202303_eu_uk_top_10000_N_10000.csv
     countries: ["de"]
-    countries_desc: "test"
+    countries_desc: "eu_uk"
     crux_date: "202303"
     maximum_rank: 10000
     num_domains: 0
