@@ -90,5 +90,5 @@ RUN wget https://zenodo.org/records/7638513/files/models.zip &&\
 COPY . .
 
 # Railway: run crawler worker (polls pipeline_jobs, executes crawl tasks)
-# Note: Railway pids.max=1000 (read-only cgroup), max ~3 Firefox browsers
+# Note: Railway pids.max=1000 (read-only cgroup), max 2 Firefox browsers
 CMD ["python", "-m", "cookie_crawler.worker"]
