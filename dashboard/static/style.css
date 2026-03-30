@@ -56,7 +56,7 @@ body {
 
 .container {
     max-width: 100%;
-    padding: 1.5rem;
+    padding: 1.5rem 2rem;
 }
 
 .page-header {
@@ -69,7 +69,6 @@ body {
 .page-header code { color: var(--primary); font-size: 1.2rem; }
 
 .card {
-    max-width: 100%;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -308,7 +307,7 @@ details summary {
     .stat-label, .section-desc, .results-experiment-id { color: #555; }
     .table th, .table td { border-color: #ccc; color: #111; }
     .badge { border: 1px solid #999; }
-    .container {  padding: 0; }
+    .container { max-width: 100%; padding: 0; }
     .chart-container { overflow: visible; }
     .chart-container text { fill: #111 !important; }
     .chart-container .gtitle { fill: #111 !important; }
