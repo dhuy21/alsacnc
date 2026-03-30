@@ -55,9 +55,9 @@ body {
 .nav-links a:hover { color: var(--text); }
 
 .container {
-    max-width: 1200px;
+    max-width: 1600px;
     margin: 0 auto;
-    padding: 1.5rem 2rem;
+    padding: 1.5rem 2.5rem;
 }
 
 .page-header {
@@ -66,17 +66,17 @@ body {
     justify-content: space-between;
     margin-bottom: 1.5rem;
 }
-.page-header h1 { font-size: 1.5rem; font-weight: 600; }
+.page-header h1 { font-size: 1.6rem; font-weight: 600; }
 .page-header code { color: var(--primary); font-size: 1.2rem; }
 
 .card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 1.25rem;
-    margin-bottom: 1.25rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
 }
-.card h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; }
+.card h2 { font-size: 1.2rem; font-weight: 600; margin-bottom: 1rem; }
 
 .btn {
     display: inline-block;
@@ -103,15 +103,13 @@ body {
     border-collapse: collapse;
 }
 .table th, .table td {
-    padding: 0.6rem 0.75rem;
+    padding: 0.65rem 0.85rem;
     text-align: left;
     border-bottom: 1px solid var(--border);
-    font-size: 0.85rem;
+    font-size: 0.9rem;
 }
-.table th { color: var(--text-dim); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
-.table-compact td { padding: 0.4rem 0.5rem; font-size: 0.8rem; }
-.table-scroll { overflow-x: auto; }
-.table-compact td:first-child { white-space: nowrap; }
+.table th { color: var(--text-dim); font-weight: 500; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px; }
+.table-compact td { padding: 0.5rem 0.6rem; font-size: 0.85rem; }
 .table-summary td:first-child { width: 65%; }
 .table-summary td:last-child { text-align: right; font-family: 'SF Mono', 'Fira Code', monospace; }
 .table a { color: var(--primary); text-decoration: none; }
@@ -157,7 +155,7 @@ body {
     padding: 1rem;
     text-align: center;
 }
-.stat-value { font-size: 1.5rem; font-weight: 700; }
+.stat-value { font-size: 1.75rem; font-weight: 700; }
 .stat-value small { font-size: 0.8rem; font-weight: 400; color: var(--text-dim); }
 .stat-label { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem; }
 .stat-success .stat-value { color: var(--success); }
@@ -281,7 +279,7 @@ details summary {
 /* ── Results page ── */
 .results-experiment-id { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1.25rem; }
 .results-experiment-id code { color: var(--primary); }
-.section-desc { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 1rem; line-height: 1.6; }
+.section-desc { font-size: 0.9rem; color: var(--text-dim); margin-bottom: 1rem; line-height: 1.6; }
 .chart-container { width: 100%; overflow-x: auto; }
 .chart-container-sm { max-width: 520px; margin: 0 auto; }
 .stats-grid-5 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }

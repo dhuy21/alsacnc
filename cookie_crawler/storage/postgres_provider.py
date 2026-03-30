@@ -38,16 +38,14 @@ CREATE TABLE IF NOT EXISTS openwpm_crawl (
     browser_id BIGINT PRIMARY KEY,
     task_id INTEGER NOT NULL,
     browser_params TEXT NOT NULL,
-    start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(task_id) REFERENCES openwpm_task(task_id)
+    start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS openwpm_site_visits (
     visit_id BIGINT PRIMARY KEY,
     browser_id BIGINT NOT NULL,
     site_url VARCHAR(500) NOT NULL,
-    site_rank INTEGER,
-    FOREIGN KEY(browser_id) REFERENCES openwpm_crawl(browser_id)
+    site_rank INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS openwpm_crawl_history (
@@ -256,8 +254,32 @@ class PostgresStorageProvider(StructuredStorageProvider):
         self.conn.autocommit = False
         with self.conn.cursor() as cur:
             cur.execute(POSTGRES_SCHEMA)
+            # Drop FK constraints from earlier schema versions.
+            # OpenWPM's SQLite never enforces FKs (no PRAGMA foreign_keys=ON),
+            # so PostgreSQL should not enforce them either.  Removing them
+            # prevents cascading INSERT failures when Railway drops connections.
+            cur.execute("""
+                ALTER TABLE openwpm_crawl
+                    DROP CONSTRAINT IF EXISTS openwpm_crawl_task_id_fkey;
+                ALTER TABLE openwpm_site_visits
+                    DROP CONSTRAINT IF EXISTS openwpm_site_visits_browser_id_fkey;
+            """)
         self.conn.commit()
         logger.info("PostgresStorageProvider: tables created")
+
+    def _reconnect(self) -> None:
+        """Re-establish the database connection after a connection loss."""
+        try:
+            if self.conn is not None:
+                try:
+                    self.conn.close()
+                except Exception:
+                    pass
+            self.conn = psycopg2.connect(self.db_url)
+            self.conn.autocommit = False
+            logger.info("PostgresStorageProvider: reconnected to database")
+        except Exception as e:
+            logger.error("PostgresStorageProvider: reconnect failed: %s", e)
 
     async def store_record(
         self, table: TableName, visit_id: VisitId, record: Dict[str, Any]
@@ -270,12 +292,28 @@ class PostgresStorageProvider(StructuredStorageProvider):
                 cur.execute("SAVEPOINT sp_record")
                 cur.execute(statement, args)
                 cur.execute("RELEASE SAVEPOINT sp_record")
+        except psycopg2.OperationalError as e:
+            logger.warning(
+                "PostgresStorageProvider: connection error, reconnecting: %s", e
+            )
+            self._reconnect()
+            try:
+                with self.conn.cursor() as cur:
+                    cur.execute(statement, args)
+            except Exception as retry_err:
+                logger.error(
+                    "PostgresStorageProvider: retry failed:\n%s\n%s",
+                    retry_err, statement,
+                )
         except Exception as e:
             try:
                 with self.conn.cursor() as cur:
                     cur.execute("ROLLBACK TO SAVEPOINT sp_record")
             except Exception:
-                self.conn.rollback()
+                try:
+                    self.conn.rollback()
+                except Exception:
+                    self._reconnect()
             logger.error(
                 "PostgresStorageProvider unsupported record:\n%s\n%s\n%s",
                 e, statement, repr(args),
@@ -308,22 +346,40 @@ class PostgresStorageProvider(StructuredStorageProvider):
     ) -> Optional[Task[None]]:
         if interrupted:
             logger.warning("Visit with visit_id %d got interrupted", visit_id)
-            assert self.conn is not None
-            with self.conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO openwpm_incomplete_visits (visit_id) VALUES (%s)",
-                    (visit_id,),
+            try:
+                assert self.conn is not None
+                with self.conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO openwpm_incomplete_visits (visit_id) VALUES (%s)",
+                        (visit_id,),
+                    )
+            except Exception as e:
+                logger.error(
+                    "PostgresStorageProvider: could not record interrupted visit %d: %s",
+                    visit_id, e,
                 )
         await self.flush_cache()
         return None
 
     async def flush_cache(self) -> None:
         if self.conn is not None:
-            self.conn.commit()
+            try:
+                self.conn.commit()
+            except psycopg2.OperationalError as e:
+                logger.warning(
+                    "PostgresStorageProvider: commit failed, reconnecting: %s", e
+                )
+                self._reconnect()
 
     async def shutdown(self) -> None:
         if self.conn is not None:
-            self.conn.commit()
-            self.conn.close()
+            try:
+                self.conn.commit()
+            except Exception:
+                pass
+            try:
+                self.conn.close()
+            except Exception:
+                pass
             self.conn = None
         logger.info("PostgresStorageProvider: shutdown complete")
