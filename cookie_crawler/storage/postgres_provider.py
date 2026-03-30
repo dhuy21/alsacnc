@@ -27,7 +27,7 @@ TABLE_PREFIX = "openwpm_"
 
 POSTGRES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS openwpm_task (
-    task_id SERIAL PRIMARY KEY,
+    task_id BIGINT PRIMARY KEY,
     start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     manager_params TEXT NOT NULL,
     openwpm_version TEXT NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS openwpm_task (
 
 CREATE TABLE IF NOT EXISTS openwpm_crawl (
     browser_id BIGINT PRIMARY KEY,
-    task_id INTEGER NOT NULL,
+    task_id BIGINT NOT NULL,
     browser_params TEXT NOT NULL,
     start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -259,6 +259,8 @@ class PostgresStorageProvider(StructuredStorageProvider):
             # so PostgreSQL should not enforce them either.  Removing them
             # prevents cascading INSERT failures when Railway drops connections.
             cur.execute("""
+                ALTER TABLE openwpm_task ALTER COLUMN task_id TYPE BIGINT;
+                ALTER TABLE openwpm_crawl ALTER COLUMN task_id TYPE BIGINT;
                 ALTER TABLE openwpm_crawl
                     DROP CONSTRAINT IF EXISTS openwpm_crawl_task_id_fkey;
                 ALTER TABLE openwpm_site_visits
