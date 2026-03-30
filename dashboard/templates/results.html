@@ -7,7 +7,7 @@
     <div class="header-actions">
         <a href="/experiment/{{ experiment_id }}" class="btn btn-secondary btn-sm">Back to Experiment</a>
         <a href="/experiment/{{ experiment_id }}/results/csv" class="btn btn-secondary btn-sm">Download CSV</a>
-        <button onclick="window.print()" class="btn btn-secondary btn-sm">Export PDF</button>
+        <button onclick="exportPDF(this)" class="btn btn-secondary btn-sm">Export PDF</button>
     </div>
 </div>
 
@@ -185,4 +185,62 @@
 
 {% block head_extra %}
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js" charset="utf-8"></script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function exportPDF(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Preparing…';
+
+    var containers = document.querySelectorAll('.chart-container');
+    var state = [];
+
+    for (var i = 0; i < containers.length; i++) {
+        var c = containers[i];
+        var plot = c.querySelector('.js-plotly-plot');
+        if (!plot || !plot.data) continue;
+
+        try {
+            await Plotly.relayout(plot, {
+                paper_bgcolor: '#fff', plot_bgcolor: '#fff',
+                'font.color': '#111',
+                'xaxis.gridcolor': '#ddd', 'yaxis.gridcolor': '#ddd',
+            });
+
+            var url = await Plotly.toImage(plot, {
+                format: 'svg',
+                width: plot.offsetWidth || 700,
+                height: plot.offsetHeight || 400,
+            });
+
+            await Plotly.relayout(plot, {
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                'font.color': '#e4e6ed',
+                'xaxis.gridcolor': 'rgba(255,255,255,0.1)',
+                'yaxis.gridcolor': 'rgba(255,255,255,0.1)',
+            });
+
+            var img = document.createElement('img');
+            img.src = url;
+            img.style.width = '100%';
+            img.className = 'print-chart-img';
+            plot.style.display = 'none';
+            c.appendChild(img);
+            state.push({ plot: plot, img: img });
+        } catch(e) { /* skip on error */ }
+    }
+
+    await new Promise(function(r) { setTimeout(r, 200); });
+    window.print();
+
+    for (var j = 0; j < state.length; j++) {
+        state[j].plot.style.display = '';
+        state[j].img.remove();
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Export PDF';
+}
+</script>
 {% endblock %}
