@@ -18,8 +18,11 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     background: var(--bg);
+    background-image: radial-gradient(ellipse at 50% 0%, rgba(99, 102, 241, 0.07) 0%, transparent 55%);
     color: var(--text);
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .navbar {
@@ -33,13 +36,25 @@ body {
     position: relative;
     z-index: 10;
 }
+.navbar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary), var(--info), var(--success));
+}
 
 .nav-brand a {
-    color: var(--primary);
     text-decoration: none;
     font-size: 1.2rem;
     font-weight: 700;
     letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .nav-subtitle {
@@ -80,7 +95,23 @@ body {
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
     transition: box-shadow 0.2s;
 }
-.card h2 { font-size: 1.2rem; font-weight: 600; margin-bottom: 1rem; }
+.card h2 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    padding-bottom: 0.6rem;
+    position: relative;
+}
+.card h2::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 36px;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary), var(--primary-hover));
+    border-radius: 2px;
+}
 
 .btn {
     display: inline-block;
@@ -95,8 +126,8 @@ body {
     transition: all 0.2s;
 }
 .btn:hover { border-color: var(--text-dim); }
-.btn-primary { background: var(--primary); border-color: var(--primary); color: white; }
-.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary { background: linear-gradient(135deg, var(--primary), #818cf8); border-color: var(--primary); color: white; }
+.btn-primary:hover { background: linear-gradient(135deg, var(--primary-hover), #a5b4fc); }
 .btn-secondary { background: transparent; }
 .btn-danger { background: var(--danger); border-color: var(--danger); color: white; }
 .btn-sm { padding: 0.25rem 0.6rem; font-size: 0.8rem; }
@@ -127,10 +158,10 @@ body {
     font-weight: 500;
 }
 .status-pending { background: #2a2d3a; color: var(--text-dim); }
-.status-running { background: #1e3a5f; color: var(--info); }
-.status-completed { background: #14532d; color: var(--success); }
-.status-failed { background: #450a0a; color: var(--danger); }
-.status-paused { background: #422006; color: var(--warning); }
+.status-running { background: #1e3a5f; color: var(--info); box-shadow: 0 0 6px rgba(59, 130, 246, 0.3); }
+.status-completed { background: #14532d; color: var(--success); box-shadow: 0 0 6px rgba(34, 197, 94, 0.2); }
+.status-failed { background: #450a0a; color: var(--danger); box-shadow: 0 0 6px rgba(239, 68, 68, 0.2); }
+.status-paused { background: #422006; color: var(--warning); box-shadow: 0 0 6px rgba(245, 158, 11, 0.2); }
 .status-cancelled { background: #2a2d3a; color: var(--text-dim); }
 
 .badge {
@@ -163,8 +194,11 @@ body {
 .stat-value { font-size: 1.75rem; font-weight: 700; }
 .stat-value small { font-size: 0.8rem; font-weight: 400; color: var(--text-dim); }
 .stat-label { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem; }
+.stat-success { border-top: 3px solid var(--success); }
 .stat-success .stat-value { color: var(--success); }
+.stat-warning { border-top: 3px solid var(--warning); }
 .stat-warning .stat-value { color: var(--warning); }
+.stat-danger { border-top: 3px solid var(--danger); }
 .stat-danger .stat-value { color: var(--danger); }
 
 .pipeline-steps {
@@ -184,10 +218,10 @@ body {
     text-align: center;
     transition: transform 0.2s, box-shadow 0.2s;
 }
-.step-completed { border-color: var(--success); }
-.step-running { border-color: var(--info); animation: pulse 2s infinite; }
-.step-failed { border-color: var(--danger); }
-.step-paused { border-color: var(--warning); }
+.step-completed { border-color: var(--success); box-shadow: 0 0 12px rgba(34, 197, 94, 0.15); }
+.step-running { border-color: var(--info); box-shadow: 0 0 12px rgba(59, 130, 246, 0.2); animation: pulse 2s infinite; }
+.step-failed { border-color: var(--danger); box-shadow: 0 0 12px rgba(239, 68, 68, 0.15); }
+.step-paused { border-color: var(--warning); box-shadow: 0 0 12px rgba(245, 158, 11, 0.15); }
 
 @keyframes pulse {
     0%, 100% { opacity: 1; }
