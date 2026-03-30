@@ -371,22 +371,39 @@ details summary {
 
 /* ── Print-friendly styles ── */
 @media print {
-    body { background: #fff; color: #111; }
+    body { background: #fff !important; color: #111; background-image: none !important; }
     .navbar, .header-actions, .pipeline-controls, .step-buttons, .log-tabs,
     #log-section, .btn { display: none !important; }
-    .card { background: #fff; border: 1px solid #ccc; page-break-inside: avoid; }
+    .container { max-width: 100%; padding: 0 1rem; }
+
+    .card {
+        background: #fff; border: 1px solid #ccc;
+        box-shadow: none; page-break-inside: auto; break-inside: auto;
+    }
     .card h2 { color: #111; }
-    .stat-card { background: #f9f9f9; border-color: #ccc; }
+    .card h2::after { background: #333; }
+
+    .stat-card { background: #f9f9f9; border-color: #ccc !important; border-top-color: #ccc !important; box-shadow: none; }
     .stat-value { color: #111 !important; }
     .stat-label, .section-desc, .results-experiment-id { color: #555; }
+
     .table th, .table td { border-color: #ccc; color: #111; }
-    .badge { border: 1px solid #999; }
-    .container { max-width: 100%; padding: 0; }
+    .table tbody tr:nth-child(even) { background: #f9f9f9; }
+    .table tbody tr:hover { background: transparent; }
+    .badge { border: 1px solid #999; color: #333 !important; background: #f0f0f0 !important; }
+    .status { box-shadow: none !important; }
+
     .chart-container { overflow: visible; }
-    .chart-container text { fill: #111 !important; }
-    .chart-container .gtitle { fill: #111 !important; }
-    .chart-container .xtitle, .chart-container .ytitle { fill: #333 !important; }
-    .chart-container .xtick text, .chart-container .ytick text { fill: #333 !important; }
-    .chart-container .legendtext { fill: #111 !important; }
+    .chart-container-sm { max-width: 100%; }
+    .js-plotly-plot { width: 100% !important; }
     .js-plotly-plot .plotly .main-svg { background: #fff !important; }
+    .chart-container text,
+    .chart-container .gtitle,
+    .chart-container .xtitle,
+    .chart-container .ytitle,
+    .chart-container .xtick text,
+    .chart-container .ytick text,
+    .chart-container .legendtext { fill: #111 !important; }
+    .chart-container .gridlayer line { stroke: #ddd !important; }
+    .chart-container .zerolinelayer line { stroke: #999 !important; }
 }
