@@ -29,6 +29,9 @@ body {
     padding: 0.75rem 2rem;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
+    position: relative;
+    z-index: 10;
 }
 
 .nav-brand a {
@@ -74,6 +77,8 @@ body {
     border-radius: var(--radius);
     padding: 1.5rem;
     margin-bottom: 1.5rem;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    transition: box-shadow 0.2s;
 }
 .card h2 { font-size: 1.2rem; font-weight: 600; margin-bottom: 1rem; }
 
@@ -153,6 +158,7 @@ body {
     border-radius: var(--radius);
     padding: 1rem;
     text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
 .stat-value { font-size: 1.75rem; font-weight: 700; }
 .stat-value small { font-size: 0.8rem; font-weight: 400; color: var(--text-dim); }
@@ -176,6 +182,7 @@ body {
     border-radius: var(--radius);
     padding: 1rem;
     text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
 }
 .step-completed { border-color: var(--success); }
 .step-running { border-color: var(--info); animation: pulse 2s infinite; }
@@ -221,7 +228,7 @@ body {
     border-radius: var(--radius);
     cursor: pointer;
     font-size: 0.9rem;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, transform 0.15s;
 }
 .radio-label:has(input:checked) { border-color: var(--primary); background: #1e1b4b; }
 .radio-label input { accent-color: var(--primary); }
@@ -235,7 +242,7 @@ body {
     border: 2px solid var(--border);
     border-radius: var(--radius);
     cursor: pointer;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 .mode-card.selected { border-color: var(--primary); background: #1e1b4b; }
 .mode-card input { display: none; }
@@ -294,6 +301,39 @@ details summary {
 .log-tab:hover { border-color: var(--text-dim); }
 .log-tab.active { border-color: var(--primary); color: var(--primary); background: #1e1b4b; }
 .log-live { min-height: 120px; max-height: 400px; }
+
+/* ── Interactive enhancements ── */
+.card:hover { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25); }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); border-color: var(--primary); }
+.pipeline-step:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
+.mode-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
+.radio-label:hover { transform: translateY(-1px); border-color: var(--text-dim); }
+
+.table tbody tr { transition: background 0.15s; }
+.table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.015); }
+.table tbody tr:hover { background: rgba(99, 102, 241, 0.07); }
+
+.btn:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2); }
+.btn:active { transform: translateY(0); box-shadow: none; }
+.btn-primary:hover { box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35); }
+
+.nav-links a { position: relative; }
+.nav-links a::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--primary);
+    transition: width 0.25s;
+}
+.nav-links a:hover::after { width: 100%; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 
 /* ── Print-friendly styles ── */
 @media print {
