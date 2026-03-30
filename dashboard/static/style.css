@@ -302,7 +302,6 @@ details summary {
     .stat-label, .section-desc, .results-experiment-id { color: #555; }
     .table th, .table td { border-color: #ccc; color: #111; }
     .badge { border: 1px solid #999; }
-    .container { max-width: 100%; padding: 0; }
     .chart-container { overflow: visible; }
     .chart-container text { fill: #111 !important; }
     .chart-container .gtitle { fill: #111 !important; }
