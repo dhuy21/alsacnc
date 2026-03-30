@@ -54,10 +54,6 @@ body {
 }
 .nav-links a:hover { color: var(--text); }
 
-.container {
-    max-width: 100%;
-}
-
 .page-header {
     display: flex;
     align-items: center;
