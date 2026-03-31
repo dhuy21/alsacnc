@@ -57,6 +57,20 @@ def ensure_tables():
         conn.execute(
             text(
                 """
+            CREATE TABLE IF NOT EXISTS experiments (
+                id VARCHAR NOT NULL PRIMARY KEY,
+                timestamp TIMESTAMP DEFAULT TIMEZONE('utc', CURRENT_TIMESTAMP),
+                num_full_iterations INTEGER,
+                country VARCHAR,
+                region VARCHAR,
+                config JSON
+            )
+            """
+            )
+        )
+        conn.execute(
+            text(
+                """
             CREATE TABLE IF NOT EXISTS pipeline_jobs (
                 id SERIAL PRIMARY KEY,
                 job_type VARCHAR NOT NULL,
@@ -381,8 +395,9 @@ def _compute_chunks(num_websites):
 
 
 def _generate_experiment_id():
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
-    return f"crux_eu_uk_de_{ts}"
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    short = uuid.uuid4().hex[:4]
+    return f"crux_eu_uk_de_{ts}_{short}"
 
 
 def _create_experiment_row(experiment_id, config):

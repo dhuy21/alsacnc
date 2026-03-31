@@ -195,14 +195,17 @@ def recover_stuck_jobs(engine):
             WHERE status = 'running'
               AND job_type = 'crawl'
               AND started_at < TIMEZONE('utc', CURRENT_TIMESTAMP) - INTERVAL ':timeout seconds'
-            RETURNING id, pipeline_id
+            RETURNING id, pipeline_id, config
             """
                 .replace(":timeout", str(LEASE_TIMEOUT_SECONDS))
             ),
         ).fetchall()
-    for job_id, pipeline_id in rows:
-        logger.warning(f"Recovered stuck crawl job {job_id}")
-        cascade_fail_dependents(engine, job_id, pipeline_id)
+    for row in rows:
+        job_id, pipeline_id, config = row
+        is_chunked = (config or {}).get("chunk_index") is not None
+        logger.warning(f"Recovered stuck crawl job {job_id} (chunked={is_chunked})")
+        if not is_chunked:
+            cascade_fail_dependents(engine, job_id, pipeline_id)
 
 
 def _resolve_experiment_id_from_db(engine):

@@ -299,6 +299,22 @@
         const bar = document.getElementById('crawl-progress-bar');
         if (bar) bar.style.width = `${(completed * 100 / total).toFixed(1)}%`;
 
+        let failedBar = document.querySelector('.progress-bar-failed');
+        if (failed > 0) {
+            if (!failedBar) {
+                failedBar = document.createElement('div');
+                failedBar.className = 'progress-bar progress-bar-failed';
+                failedBar.style.background = '#e74c3c';
+                failedBar.style.height = '100%';
+                failedBar.style.transition = 'width 0.5s';
+                const container = document.querySelector('.progress-bar-container');
+                if (container) container.appendChild(failedBar);
+            }
+            failedBar.style.width = `${(failed * 100 / total).toFixed(1)}%`;
+        } else if (failedBar) {
+            failedBar.style.width = '0%';
+        }
+
         const group = document.getElementById('crawl-group');
         if (group) {
             let gs = 'pending';
@@ -393,17 +409,23 @@
     // Auto-select the first running (or first) job
     const steps = document.querySelectorAll('.pipeline-step[data-job-id]');
     let picked = false;
-    steps.forEach(s => {
-        if (!picked && s.classList.contains('step-running')) {
-            switchLogTab(parseInt(s.dataset.jobId));
+    if (MULTI_CHUNK) {
+        const sel = document.getElementById('chunk-log-select');
+        if (sel && sel.options.length > 0) {
+            switchLogTab(parseInt(sel.options[0].value));
             picked = true;
         }
-    });
+    }
+    if (!picked) {
+        steps.forEach(s => {
+            if (!picked && s.classList.contains('step-running')) {
+                switchLogTab(parseInt(s.dataset.jobId));
+                picked = true;
+            }
+        });
+    }
     if (!picked && steps.length > 0) {
         switchLogTab(parseInt(steps[0].dataset.jobId));
-    } else if (!picked && MULTI_CHUNK) {
-        const sel = document.getElementById('chunk-log-select');
-        if (sel && sel.options.length > 0) switchLogTab(parseInt(sel.options[0].value));
     }
 
     {% if has_active %}
