@@ -218,10 +218,12 @@ body {
     text-align: center;
     transition: transform 0.2s, box-shadow 0.2s;
 }
+.step-pending { border-color: var(--text-muted); }
 .step-completed { border-color: var(--success); box-shadow: 0 0 12px rgba(34, 197, 94, 0.15); }
 .step-running { border-color: var(--info); box-shadow: 0 0 12px rgba(59, 130, 246, 0.2); animation: pulse 2s infinite; }
 .step-failed { border-color: var(--danger); box-shadow: 0 0 12px rgba(239, 68, 68, 0.15); }
 .step-paused { border-color: var(--warning); box-shadow: 0 0 12px rgba(245, 158, 11, 0.15); }
+.step-cancelled { border-color: var(--text-muted); opacity: 0.6; }
 
 @keyframes pulse {
     0%, 100% { opacity: 1; }

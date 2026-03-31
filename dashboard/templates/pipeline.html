@@ -129,6 +129,7 @@
     async function fetchLogs(jobId) {
         try {
             const res = await fetch(`/api/jobs/${jobId}/logs`);
+            if (!res.ok) return;
             const data = await res.json();
             logCache[jobId] = data.logs || "(no output yet)";
             if (activeJobId === jobId) {
@@ -143,6 +144,7 @@
         if (!polling) return;
         try {
             const res = await fetch(`/api/pipeline/${PIPELINE_ID}/status`);
+            if (!res.ok) { setTimeout(pollStatus, POLL_MS); return; }
             const jobs = await res.json();
             let anyActive = false;
             jobs.forEach(j => {
