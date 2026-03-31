@@ -281,15 +281,15 @@ def build_violations_chart(
         return None
 
     rows = [
-        ("interface_interference", dark_patterns, DARK_PATTERN_COLOR),
-        ("forced_action", dark_patterns, DARK_PATTERN_COLOR),
-        ("undeclared_purposes", violations, VIOLATION_COLOR),
+        ("missing_notice", violations, VIOLATION_COLOR),
+        ("missing_reject", violations, VIOLATION_COLOR),
+        ("AA_cookies_detected_after_reject", violations, VIOLATION_COLOR),
         ("AA_cookies_detected_prior_to_interaction", violations, VIOLATION_COLOR),
         ("AA_cookies_detected_after_close", violations, VIOLATION_COLOR),
         ("AA_cookies_detected_after_save", violations, VIOLATION_COLOR),
-        ("AA_cookies_detected_after_reject", violations, VIOLATION_COLOR),
-        ("missing_reject", violations, VIOLATION_COLOR),
-        ("missing_notice", violations, VIOLATION_COLOR),
+        ("undeclared_purposes", violations, VIOLATION_COLOR),
+        ("interface_interference", dark_patterns, DARK_PATTERN_COLOR),
+        ("forced_action", dark_patterns, DARK_PATTERN_COLOR),
     ]
 
     all_labels = {**VIOLATION_LABELS, **DARK_PATTERN_LABELS}
@@ -334,7 +334,17 @@ def build_rank_chart(cr: pd.DataFrame) -> Optional[str]:
     palette = ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#ec4899"]
 
     all_labels = {**VIOLATION_LABELS, **DARK_PATTERN_LABELS}
-    keys = list(VIOLATION_LABELS.keys()) + list(DARK_PATTERN_LABELS.keys())
+    keys = [
+        "missing_notice",
+        "missing_reject",
+        "undeclared_purposes",
+        "AA_cookies_detected_after_reject",
+        "AA_cookies_detected_prior_to_interaction",
+        "AA_cookies_detected_after_close",
+        "AA_cookies_detected_after_save",
+        "forced_action",
+        "interface_interference",
+    ]
     labels = [all_labels[k] for k in keys]
 
     fig = go.Figure()
