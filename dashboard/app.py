@@ -38,7 +38,14 @@ def get_engine():
             f"postgresql+psycopg2://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}"
             f"@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME')}"
         )
-        _engine = create_engine(db_url, poolclass=NullPool)
+        _engine = create_engine(
+            db_url,
+            poolclass=NullPool,
+            connect_args={
+                "connect_timeout": 5,
+                "options": "-c statement_timeout=30000",
+            },
+        )
     return _engine
 
 
@@ -151,7 +158,7 @@ def execute(sql, params=None):
 # ---------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+def index(request: Request):
     experiments = query_all(
         """
         SELECT e.id, e.timestamp, e.country,
@@ -177,7 +184,7 @@ async def index(request: Request):
 
 
 @app.get("/experiment/{experiment_id}", response_class=HTMLResponse)
-async def experiment_detail(request: Request, experiment_id: str):
+def experiment_detail(request: Request, experiment_id: str):
     experiment = query_one(
         "SELECT * FROM experiments WHERE id = :id", {"id": experiment_id}
     )
@@ -347,7 +354,7 @@ def _get_prediction_counts(experiment_id):
 
 
 @app.get("/new", response_class=HTMLResponse)
-async def new_experiment_form(request: Request):
+def new_experiment_form(request: Request):
     return templates.TemplateResponse(
         request=request, name="new_experiment.html",
     )
@@ -359,7 +366,7 @@ STEP_DEPS = {"predict_cookies": "crawl", "predict_purposes": "predict_cookies", 
 
 
 @app.post("/new")
-async def create_experiment(
+def create_experiment(
     request: Request,
     num_websites: int = Form(10),
     num_browsers: int = Form(1),
@@ -413,7 +420,7 @@ def _insert_job(job_type, config, pipeline_id, depends_on=None, experiment_id=No
 
 
 @app.get("/pipeline/{pipeline_id}", response_class=HTMLResponse)
-async def pipeline_status(request: Request, pipeline_id: str):
+def pipeline_status(request: Request, pipeline_id: str):
     jobs = query_all(
         "SELECT * FROM pipeline_jobs WHERE pipeline_id = :pid ORDER BY created_at",
         {"pid": pipeline_id},
@@ -435,7 +442,7 @@ async def pipeline_status(request: Request, pipeline_id: str):
 
 
 @app.post("/pipeline/{pipeline_id}/pause")
-async def pause_pipeline(pipeline_id: str):
+def pause_pipeline(pipeline_id: str):
     execute(
         """
         UPDATE pipeline_jobs SET status = 'paused'
@@ -447,7 +454,7 @@ async def pause_pipeline(pipeline_id: str):
 
 
 @app.post("/pipeline/{pipeline_id}/resume")
-async def resume_pipeline(pipeline_id: str):
+def resume_pipeline(pipeline_id: str):
     execute(
         """
         UPDATE pipeline_jobs SET status = 'pending'
@@ -459,7 +466,7 @@ async def resume_pipeline(pipeline_id: str):
 
 
 @app.post("/pipeline/{pipeline_id}/cancel")
-async def cancel_pipeline(pipeline_id: str):
+def cancel_pipeline(pipeline_id: str):
     execute(
         """
         UPDATE pipeline_jobs SET status = 'cancelled'
@@ -471,7 +478,7 @@ async def cancel_pipeline(pipeline_id: str):
 
 
 @app.post("/step/run")
-async def run_single_step(
+def run_single_step(
     job_type: str = Form(...),
     experiment_id: Optional[str] = Form(None),
     num_websites: int = Form(10),
@@ -528,7 +535,7 @@ async def run_single_step(
 # ---------------------------------------------------------------------------
 
 @app.get("/api/pipeline/{pipeline_id}/status")
-async def api_pipeline_status(pipeline_id: str):
+def api_pipeline_status(pipeline_id: str):
     jobs = query_all(
         "SELECT id, job_type, status, progress, error_message, experiment_id, started_at, completed_at FROM pipeline_jobs WHERE pipeline_id = :pid ORDER BY created_at",
         {"pid": pipeline_id},
@@ -549,7 +556,7 @@ async def api_pipeline_status(pipeline_id: str):
 
 
 @app.get("/api/experiments")
-async def api_experiments():
+def api_experiments():
     rows = query_all(
         """
         SELECT e.id, e.timestamp, COUNT(w.id) AS num_websites
@@ -568,7 +575,7 @@ async def api_experiments():
 # ---------------------------------------------------------------------------
 
 @app.get("/experiment/{experiment_id}/results", response_class=HTMLResponse)
-async def experiment_results(request: Request, experiment_id: str):
+def experiment_results(request: Request, experiment_id: str):
     from dashboard.results import COOKIEBLOCK_THRESHOLD, generate_results
 
     res = generate_results(get_engine(), experiment_id)
@@ -584,7 +591,7 @@ async def experiment_results(request: Request, experiment_id: str):
 
 
 @app.get("/experiment/{experiment_id}/results/csv")
-async def experiment_results_csv(experiment_id: str):
+def experiment_results_csv(experiment_id: str):
     from dashboard.results import results_to_csv
 
     csv_str = results_to_csv(get_engine(), experiment_id)
@@ -598,7 +605,7 @@ async def experiment_results_csv(experiment_id: str):
 
 
 @app.get("/api/jobs/{job_id}/logs")
-async def api_job_logs(job_id: int):
+def api_job_logs(job_id: int):
     row = query_one(
         "SELECT logs, status, progress FROM pipeline_jobs WHERE id = :id",
         {"id": job_id},
