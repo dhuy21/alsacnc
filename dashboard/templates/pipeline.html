@@ -32,8 +32,104 @@
     </div>
     {% endif %}
 
+    {% set crawl_jobs = jobs | selectattr('job_type', 'equalto', 'crawl') | list %}
+    {% set other_jobs = jobs | rejectattr('job_type', 'equalto', 'crawl') | list %}
+    {% set multi_chunk = crawl_jobs | length > 1 %}
+
     <div class="pipeline-steps" id="pipeline-steps">
-        {% for job in jobs %}
+        {% if multi_chunk %}
+        {# Grouped crawl summary #}
+        {% set crawl_completed = crawl_jobs | selectattr('status', 'equalto', 'completed') | list | length %}
+        {% set crawl_running = crawl_jobs | selectattr('status', 'equalto', 'running') | list | length %}
+        {% set crawl_failed = crawl_jobs | selectattr('status', 'equalto', 'failed') | list | length %}
+        {% set crawl_total = crawl_jobs | length %}
+        {% set crawl_done = crawl_completed + crawl_failed %}
+        {% if crawl_done == crawl_total and crawl_failed == 0 %}
+            {% set crawl_group_status = 'completed' %}
+        {% elif crawl_running > 0 %}
+            {% set crawl_group_status = 'running' %}
+        {% elif crawl_done == crawl_total and crawl_failed > 0 %}
+            {% set crawl_group_status = 'failed' %}
+        {% else %}
+            {% set crawl_group_status = 'pending' %}
+        {% endif %}
+
+        <div class="pipeline-step step-{{ crawl_group_status }}" id="crawl-group">
+            <div class="step-icon">
+                {% if crawl_group_status == 'completed' %}&#10003;
+                {% elif crawl_group_status == 'running' %}&#9654;
+                {% elif crawl_group_status == 'failed' %}&#10007;
+                {% else %}&#9679;{% endif %}
+            </div>
+            <div class="step-info">
+                <div class="step-type">Crawl ({{ crawl_total }} chunks)</div>
+                <div class="step-status" id="crawl-group-status">{{ crawl_completed }}/{{ crawl_total }} completed{% if crawl_failed > 0 %}, {{ crawl_failed }} failed{% endif %}{% if crawl_running > 0 %}, {{ crawl_running }} running{% endif %}</div>
+                <div class="progress-bar-container" style="margin-top:6px">
+                    <div class="progress-bar" id="crawl-progress-bar"
+                         style="width:{{ (crawl_completed * 100 / crawl_total) | round(1) }}%"></div>
+                    {% if crawl_failed > 0 %}
+                    <div class="progress-bar progress-bar-failed"
+                         style="width:{{ (crawl_failed * 100 / crawl_total) | round(1) }}%; background:#e74c3c"></div>
+                    {% endif %}
+                </div>
+                <button class="btn btn-sm btn-secondary" style="margin-top:6px;font-size:0.75rem"
+                        onclick="document.getElementById('crawl-detail').classList.toggle('hidden')">Show Chunks</button>
+            </div>
+        </div>
+
+        <div id="crawl-detail" class="hidden" style="width:100%;margin:8px 0">
+            <div style="display:flex;flex-wrap:wrap;gap:4px">
+                {% for j in crawl_jobs %}
+                <div class="chunk-badge chunk-{{ j.status }}" title="Chunk {{ loop.index0 }}: {{ j.status }}"
+                     data-job-id="{{ j.id }}" onclick="switchLogTab({{ j.id }})">
+                    {{ loop.index0 }}
+                </div>
+                {% endfor %}
+            </div>
+            {% if crawl_failed > 0 %}
+            <div style="margin-top:8px">
+                <form method="post" action="/pipeline/{{ pipeline_id }}/retry-failed" style="display:inline"
+                      onsubmit="return confirm('Retry all failed crawl chunks?')">
+                    <button type="submit" class="btn btn-sm btn-secondary">Retry {{ crawl_failed }} Failed Chunks</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="pipeline-arrow">&rarr;</div>
+        {% else %}
+        {# Single crawl job - original display #}
+        {% for j in crawl_jobs %}
+        <div class="pipeline-step step-{{ j.status }}" id="step-{{ j.id }}" data-job-id="{{ j.id }}">
+            <div class="step-icon">
+                {% if j.status == 'completed' %}&#10003;
+                {% elif j.status == 'running' %}&#9654;
+                {% elif j.status == 'failed' %}&#10007;
+                {% elif j.status == 'paused' %}&#9208;
+                {% elif j.status == 'cancelled' %}&#9632;
+                {% else %}&#9679;{% endif %}
+            </div>
+            <div class="step-info">
+                <div class="step-type">{{ j.job_type | replace('_', ' ') | title }}</div>
+                <div class="step-status">{{ j.status }}</div>
+                {% if j.progress %}
+                <div class="step-progress">
+                    {% set prog = j.progress if j.progress is mapping else {} %}
+                    {{ prog.get('message', '') }}
+                </div>
+                {% endif %}
+                {% if j.error_message %}
+                <div class="step-error">{{ j.error_message[:200] }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% if not loop.last %}<div class="pipeline-arrow">&rarr;</div>{% endif %}
+        {% endfor %}
+        {% if other_jobs %}<div class="pipeline-arrow">&rarr;</div>{% endif %}
+        {% endif %}
+
+        {# Non-crawl jobs #}
+        {% for job in other_jobs %}
         <div class="pipeline-step step-{{ job.status }}" id="step-{{ job.id }}" data-job-id="{{ job.id }}">
             <div class="step-icon">
                 {% if job.status == 'completed' %}&#10003;
@@ -70,12 +166,29 @@
     </div>
 </section>
 
-{# ── Live Log Viewer ── #}
+{# -- Live Log Viewer -- #}
 <section class="card" id="log-section">
     <h2>Live Logs</h2>
     <div id="log-tabs" class="log-tabs">
-        {% for job in jobs %}
-        <button class="log-tab {% if loop.first %}active{% endif %}"
+        {% if multi_chunk %}
+        <span style="font-size:0.8rem;color:#999;margin-right:8px">Crawl chunks:</span>
+        <select id="chunk-log-select" aria-label="Select crawl chunk log" onchange="switchLogTab(parseInt(this.value))" style="margin-right:12px;padding:4px 8px;border-radius:4px;border:1px solid #444;background:#1a1a2e;color:#e0e0ff">
+            {% for j in crawl_jobs %}
+            <option value="{{ j.id }}">Chunk {{ loop.index0 }} ({{ j.status }})</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        {% if not multi_chunk %}
+        {% for j in crawl_jobs %}
+        <button class="log-tab {% if loop.first and not other_jobs %}active{% endif %}"
+                data-job-id="{{ j.id }}"
+                onclick="switchLogTab({{ j.id }})">
+            {{ j.job_type | replace('_', ' ') | title }} (#{{ j.id }})
+        </button>
+        {% endfor %}
+        {% endif %}
+        {% for job in other_jobs %}
+        <button class="log-tab"
                 data-job-id="{{ job.id }}"
                 onclick="switchLogTab({{ job.id }})">
             {{ job.job_type | replace('_', ' ') | title }} (#{{ job.id }})
@@ -107,11 +220,35 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+.progress-bar-container {
+    width: 100%; height: 8px; background: #333; border-radius: 4px;
+    overflow: hidden; display: flex;
+}
+.progress-bar {
+    height: 100%; background: #27ae60; transition: width 0.5s;
+}
+.progress-bar-failed { height: 100%; transition: width 0.5s; }
+.chunk-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 24px; border-radius: 4px; font-size: 0.7rem;
+    cursor: pointer; font-weight: 600;
+}
+.chunk-completed { background: #27ae60; color: #fff; }
+.chunk-running { background: #2980b9; color: #fff; animation: pulse 1.5s infinite; }
+.chunk-failed { background: #e74c3c; color: #fff; }
+.chunk-pending { background: #444; color: #aaa; }
+.chunk-cancelled { background: #666; color: #999; }
+.chunk-paused { background: #f39c12; color: #fff; }
+.hidden { display: none; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+</style>
 <script>
 (function() {
     const PIPELINE_ID = "{{ pipeline_id }}";
     const POLL_MS = 4000;
     const ICONS = {completed: "\u2713", running: "\u25B6", failed: "\u2717", paused: "\u23F8", cancelled: "\u25A0", pending: "\u25CF"};
+    const MULTI_CHUNK = {{ 'true' if multi_chunk else 'false' }};
     let activeJobId = null;
     let polling = true;
     let logCache = {};
@@ -122,6 +259,8 @@
         document.querySelectorAll('.log-tab').forEach(t => t.classList.remove('active'));
         const btn = document.querySelector(`.log-tab[data-job-id="${jobId}"]`);
         if (btn) btn.classList.add('active');
+        const sel = document.getElementById('chunk-log-select');
+        if (sel) sel.value = jobId;
         fetchLogs(jobId);
     }
     window.switchLogTab = switchLogTab;
@@ -140,40 +279,90 @@
         } catch (e) {}
     }
 
+    function updateChunkBadges(jobs) {
+        const crawlJobs = jobs.filter(j => j.job_type === 'crawl');
+        if (crawlJobs.length <= 1) return;
+
+        const completed = crawlJobs.filter(j => j.status === 'completed').length;
+        const failed = crawlJobs.filter(j => j.status === 'failed').length;
+        const running = crawlJobs.filter(j => j.status === 'running').length;
+        const total = crawlJobs.length;
+
+        const statusEl = document.getElementById('crawl-group-status');
+        if (statusEl) {
+            let txt = `${completed}/${total} completed`;
+            if (failed > 0) txt += `, ${failed} failed`;
+            if (running > 0) txt += `, ${running} running`;
+            statusEl.textContent = txt;
+        }
+
+        const bar = document.getElementById('crawl-progress-bar');
+        if (bar) bar.style.width = `${(completed * 100 / total).toFixed(1)}%`;
+
+        const group = document.getElementById('crawl-group');
+        if (group) {
+            let gs = 'pending';
+            if (completed + failed === total && failed === 0) gs = 'completed';
+            else if (running > 0) gs = 'running';
+            else if (completed + failed === total && failed > 0) gs = 'failed';
+            group.className = `pipeline-step step-${gs}`;
+            const icon = group.querySelector('.step-icon');
+            if (icon) icon.textContent = ICONS[gs] || ICONS.pending;
+        }
+
+        const sel = document.getElementById('chunk-log-select');
+        crawlJobs.forEach((j, idx) => {
+            const badge = document.querySelector(`.chunk-badge[data-job-id="${j.id}"]`);
+            if (badge) {
+                badge.className = `chunk-badge chunk-${j.status}`;
+                badge.title = `Chunk ${idx}: ${j.status}`;
+            }
+            if (sel) {
+                const opt = sel.querySelector(`option[value="${j.id}"]`);
+                if (opt) opt.textContent = `Chunk ${idx} (${j.status})`;
+            }
+        });
+    }
+
     async function pollStatus() {
         if (!polling) return;
         try {
             const res = await fetch(`/api/pipeline/${PIPELINE_ID}/status`);
             if (!res.ok) { setTimeout(pollStatus, POLL_MS); return; }
-            const jobs = await res.json();
+            const data = await res.json();
+            const jobs = data.jobs || data;
             let anyActive = false;
+
             jobs.forEach(j => {
                 const step = document.getElementById(`step-${j.id}`);
-                if (!step) return;
-                step.className = `pipeline-step step-${j.status}`;
-                const info = step.querySelector('.step-info');
-                const icon = step.querySelector('.step-icon');
-                if (icon) icon.textContent = ICONS[j.status] || ICONS.pending;
-                const statusEl = step.querySelector('.step-status');
-                if (statusEl) statusEl.textContent = j.status;
-                const progEl = step.querySelector('.step-progress');
-                if (j.progress && j.progress.message) {
-                    if (!progEl) {
-                        const d = document.createElement('div');
-                        d.className = 'step-progress';
-                        d.textContent = j.progress.message;
-                        info.appendChild(d);
-                    } else {
-                        progEl.textContent = j.progress.message;
+                if (step) {
+                    step.className = `pipeline-step step-${j.status}`;
+                    const info = step.querySelector('.step-info');
+                    const icon = step.querySelector('.step-icon');
+                    if (icon) icon.textContent = ICONS[j.status] || ICONS.pending;
+                    const statusEl = step.querySelector('.step-status');
+                    if (statusEl) statusEl.textContent = j.status;
+                    const progEl = step.querySelector('.step-progress');
+                    if (j.progress && j.progress.message) {
+                        if (!progEl) {
+                            const d = document.createElement('div');
+                            d.className = 'step-progress';
+                            d.textContent = j.progress.message;
+                            info.appendChild(d);
+                        } else {
+                            progEl.textContent = j.progress.message;
+                        }
                     }
+                    let errEl = step.querySelector('.step-error');
+                    if (j.error_message) {
+                        if (!errEl) { errEl = document.createElement('div'); errEl.className = 'step-error'; info.appendChild(errEl); }
+                        errEl.textContent = j.error_message.substring(0, 200);
+                    } else if (errEl) { errEl.remove(); }
                 }
-                let errEl = step.querySelector('.step-error');
-                if (j.error_message) {
-                    if (!errEl) { errEl = document.createElement('div'); errEl.className = 'step-error'; info.appendChild(errEl); }
-                    errEl.textContent = j.error_message.substring(0, 200);
-                } else if (errEl) { errEl.remove(); }
                 if (j.status === 'running' || j.status === 'pending') anyActive = true;
             });
+
+            if (MULTI_CHUNK) updateChunkBadges(jobs);
 
             if (!knownExperimentId) {
                 for (const j of jobs) {
@@ -202,7 +391,7 @@
     }
 
     // Auto-select the first running (or first) job
-    const steps = document.querySelectorAll('.pipeline-step');
+    const steps = document.querySelectorAll('.pipeline-step[data-job-id]');
     let picked = false;
     steps.forEach(s => {
         if (!picked && s.classList.contains('step-running')) {
@@ -212,6 +401,9 @@
     });
     if (!picked && steps.length > 0) {
         switchLogTab(parseInt(steps[0].dataset.jobId));
+    } else if (!picked && MULTI_CHUNK) {
+        const sel = document.getElementById('chunk-log-select');
+        if (sel && sel.options.length > 0) switchLogTab(parseInt(sel.options[0].value));
     }
 
     {% if has_active %}

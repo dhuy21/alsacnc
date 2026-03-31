@@ -10,10 +10,12 @@ Provides:
 
 import json
 import logging
+import math
 import os
 import threading
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -363,6 +365,39 @@ def new_experiment_form(request: Request):
 VALID_JOB_TYPES = {"crawl", "predict_cookies", "predict_purposes", "summary"}
 VALID_NUM_WEBSITES = {3, 10, 50, 100, 500, 1000, 10000, 50000}
 STEP_DEPS = {"predict_cookies": "crawl", "predict_purposes": "predict_cookies", "summary": "predict_purposes"}
+MIN_CHUNK_SIZE = 25
+MAX_CHUNK_SIZE = 500
+TARGET_NUM_CHUNKS = 20
+
+
+def _compute_chunks(num_websites):
+    """Calculate chunk_size and num_chunks for optimal replica utilization."""
+    if num_websites <= MIN_CHUNK_SIZE:
+        return num_websites, 1
+    chunk_size = max(MIN_CHUNK_SIZE, num_websites // TARGET_NUM_CHUNKS)
+    chunk_size = min(chunk_size, MAX_CHUNK_SIZE)
+    num_chunks = math.ceil(num_websites / chunk_size)
+    return chunk_size, num_chunks
+
+
+def _generate_experiment_id():
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
+    return f"crux_eu_uk_de_{ts}"
+
+
+def _create_experiment_row(experiment_id, config):
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+            INSERT INTO experiments (id, num_full_iterations, config)
+            VALUES (:id, 0, :config)
+            ON CONFLICT (id) DO NOTHING
+            """
+            ),
+            {"id": experiment_id, "config": json.dumps(config)},
+        )
 
 
 @app.post("/new")
@@ -380,19 +415,46 @@ def create_experiment(
         return HTMLResponse("Invalid mode", status_code=400)
 
     pipeline_id = str(uuid.uuid4())[:8]
-    config = {
-        "config_path": "config/experiment_config_railway.yaml",
+    experiment_id = _generate_experiment_id()
+    _create_experiment_row(experiment_id, {
         "num_browsers": num_browsers,
         "num_websites": num_websites,
-    }
+        "mode": mode,
+    })
+
+    chunk_size, num_chunks = _compute_chunks(num_websites)
 
     if mode == "full":
-        crawl_id = _insert_job("crawl", config, pipeline_id)
-        pc_id = _insert_job("predict_cookies", {}, pipeline_id, depends_on=crawl_id)
-        pp_id = _insert_job("predict_purposes", {}, pipeline_id, depends_on=pc_id)
-        _insert_job("summary", {}, pipeline_id, depends_on=pp_id)
+        if num_chunks == 1:
+            config = {
+                "config_path": "config/experiment_config_railway.yaml",
+                "num_browsers": num_browsers,
+                "num_websites": num_websites,
+            }
+            crawl_id = _insert_job("crawl", config, pipeline_id, experiment_id=experiment_id)
+            pc_id = _insert_job("predict_cookies", {}, pipeline_id, depends_on=crawl_id, experiment_id=experiment_id)
+            pp_id = _insert_job("predict_purposes", {}, pipeline_id, depends_on=pc_id, experiment_id=experiment_id)
+            _insert_job("summary", {}, pipeline_id, depends_on=pp_id, experiment_id=experiment_id)
+        else:
+            for i in range(num_chunks):
+                chunk_config = {
+                    "config_path": "config/experiment_config_railway.yaml",
+                    "num_browsers": num_browsers,
+                    "chunk_index": i,
+                    "chunk_size": chunk_size,
+                    "total_websites": num_websites,
+                }
+                _insert_job("crawl", chunk_config, pipeline_id, experiment_id=experiment_id)
+            pc_id = _insert_job("predict_cookies", {}, pipeline_id, experiment_id=experiment_id)
+            pp_id = _insert_job("predict_purposes", {}, pipeline_id, depends_on=pc_id, experiment_id=experiment_id)
+            _insert_job("summary", {}, pipeline_id, depends_on=pp_id, experiment_id=experiment_id)
     else:
-        _insert_job("crawl", config, pipeline_id)
+        config = {
+            "config_path": "config/experiment_config_railway.yaml",
+            "num_browsers": num_browsers,
+            "num_websites": num_websites,
+        }
+        _insert_job("crawl", config, pipeline_id, experiment_id=experiment_id)
 
     return RedirectResponse(url=f"/pipeline/{pipeline_id}", status_code=303)
 
@@ -477,6 +539,27 @@ def cancel_pipeline(pipeline_id: str):
     return RedirectResponse(url=f"/pipeline/{pipeline_id}", status_code=303)
 
 
+@app.post("/pipeline/{pipeline_id}/retry-failed")
+def retry_failed_chunks(pipeline_id: str):
+    """Reset failed crawl jobs back to pending so replicas can pick them up again."""
+    execute(
+        """
+        UPDATE pipeline_jobs
+        SET status = 'pending',
+            error_message = NULL,
+            logs = NULL,
+            started_at = NULL,
+            completed_at = NULL,
+            worker_id = NULL
+        WHERE pipeline_id = :pid
+          AND job_type = 'crawl'
+          AND status = 'failed'
+        """,
+        {"pid": pipeline_id},
+    )
+    return RedirectResponse(url=f"/pipeline/{pipeline_id}", status_code=303)
+
+
 @app.post("/step/run")
 def run_single_step(
     job_type: str = Form(...),
@@ -524,6 +607,9 @@ def run_single_step(
         config["config_path"] = "config/experiment_config_railway.yaml"
         config["num_browsers"] = num_browsers
         config["num_websites"] = num_websites
+        if not experiment_id:
+            experiment_id = _generate_experiment_id()
+            _create_experiment_row(experiment_id, config)
 
     _insert_job(job_type, config, pipeline_id, experiment_id=experiment_id)
 
@@ -537,22 +623,40 @@ def run_single_step(
 @app.get("/api/pipeline/{pipeline_id}/status")
 def api_pipeline_status(pipeline_id: str):
     jobs = query_all(
-        "SELECT id, job_type, status, progress, error_message, experiment_id, started_at, completed_at FROM pipeline_jobs WHERE pipeline_id = :pid ORDER BY created_at",
+        "SELECT id, job_type, status, progress, error_message, experiment_id, config, started_at, completed_at FROM pipeline_jobs WHERE pipeline_id = :pid ORDER BY created_at",
         {"pid": pipeline_id},
     )
-    return [
-        {
-            "id": j.id,
-            "job_type": j.job_type,
-            "status": j.status,
-            "progress": j.progress,
-            "error_message": j.error_message,
-            "experiment_id": j.experiment_id,
-            "started_at": str(j.started_at) if j.started_at else None,
-            "completed_at": str(j.completed_at) if j.completed_at else None,
+
+    crawl_jobs = [j for j in jobs if j.job_type == "crawl"]
+    crawl_summary = None
+    if len(crawl_jobs) > 1:
+        completed = sum(1 for j in crawl_jobs if j.status == "completed")
+        failed = sum(1 for j in crawl_jobs if j.status == "failed")
+        running = sum(1 for j in crawl_jobs if j.status == "running")
+        crawl_summary = {
+            "total_chunks": len(crawl_jobs),
+            "completed": completed,
+            "failed": failed,
+            "running": running,
+            "pending": len(crawl_jobs) - completed - failed - running,
         }
-        for j in jobs
-    ]
+
+    return {
+        "jobs": [
+            {
+                "id": j.id,
+                "job_type": j.job_type,
+                "status": j.status,
+                "progress": j.progress,
+                "error_message": j.error_message,
+                "experiment_id": j.experiment_id,
+                "started_at": str(j.started_at) if j.started_at else None,
+                "completed_at": str(j.completed_at) if j.completed_at else None,
+            }
+            for j in jobs
+        ],
+        "crawl_summary": crawl_summary,
+    }
 
 
 @app.get("/api/experiments")

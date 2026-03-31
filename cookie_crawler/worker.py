@@ -1,11 +1,13 @@
 """
 Crawler worker: polls pipeline_jobs for crawl tasks and executes them.
-Replaces 'sleep infinity' CMD in Dockerfile.railway.
+Supports domain sharding for horizontal scaling (Phase 4).
 """
 
+import csv
 import json
 import logging
 import os
+import random
 import signal
 import subprocess
 import sys
@@ -22,9 +24,11 @@ logging.basicConfig(
 logger = logging.getLogger("crawler_worker")
 
 POLL_INTERVAL = 5
-LEASE_TIMEOUT_SECONDS = 7200  # 2 hours: mark stuck jobs as failed
+LEASE_TIMEOUT_SECONDS = 28800  # 8 hours: chunked crawls can take long
 LOG_FLUSH_INTERVAL = 10
 WORKER_ID = f"crawler-{os.getenv('HOSTNAME', os.getpid())}"
+
+CRUX_CSV_PATH = "domains/crux_202303_eu_uk_top_10000_N_10000.csv"
 
 
 def get_engine():
@@ -235,10 +239,54 @@ def _flush_logs(engine, job_id, log_lines):
         pass
 
 
+def _load_crux_origins(csv_path=CRUX_CSV_PATH):
+    """Load origin URLs from the cached CrUX CSV file."""
+    origins = []
+    with open(csv_path, "r") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            origins.append(row["origin"])
+    return origins
+
+
+def _prepare_chunk_file(job_id, config):
+    """For chunked crawl jobs, prepare a temp file with the domain subset.
+    Returns (temp_path, num_sites) or (None, None) for non-chunked jobs."""
+    chunk_index = config.get("chunk_index")
+    if chunk_index is None:
+        return None, None
+
+    chunk_size = config.get("chunk_size", 500)
+    total_websites = config.get("total_websites", 0)
+
+    all_origins = _load_crux_origins()
+    logger.info(f"Job {job_id}: Loaded {len(all_origins)} origins from CrUX CSV")
+
+    if 0 < total_websites < len(all_origins):
+        random.seed(42)
+        all_origins = random.sample(all_origins, total_websites)
+        all_origins.sort()
+
+    start = chunk_index * chunk_size
+    end = min(start + chunk_size, len(all_origins))
+    chunk = all_origins[start:end]
+
+    temp_path = f"/tmp/chunk_{job_id}.csv"
+    with open(temp_path, "w") as f:
+        for origin in chunk:
+            f.write(f"{origin}\n")
+
+    logger.info(f"Job {job_id}: Chunk {chunk_index} — {len(chunk)} sites [{start}:{end}]")
+    return temp_path, len(chunk)
+
+
 def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
     """Execute crawl as subprocess and monitor progress."""
     config = config or {}
     config_path = config.get("config_path", "config/experiment_config_railway.yaml")
+    is_chunked = config.get("chunk_index") is not None
+
+    chunk_path, chunk_count = _prepare_chunk_file(job_id, config)
 
     cmd = [
         "python",
@@ -250,15 +298,23 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
 
     if config.get("num_browsers"):
         cmd.extend(["--num_browsers", str(config["num_browsers"])])
-    if config.get("num_websites"):
+
+    if chunk_path:
+        cmd.extend(["--domains_source", "list", "--domains_path", chunk_path, "--override"])
+    elif config.get("num_websites"):
         cmd.extend(["--num_domains", str(config["num_websites"])])
-    if config.get("domains_path"):
+
+    if config.get("domains_path") and not chunk_path:
         cmd.extend(["--domains_path", config["domains_path"]])
     if experiment_id:
         cmd.extend(["--experiment_id", str(experiment_id)])
 
-    logger.info(f"Job {job_id}: Starting crawl with cmd: {' '.join(cmd)}")
-    update_job_progress(engine, job_id, {"status": "starting", "message": "Launching crawler..."})
+    chunk_label = f" (chunk {config['chunk_index']})" if is_chunked else ""
+    logger.info(f"Job {job_id}: Starting crawl{chunk_label} with cmd: {' '.join(cmd)}")
+    update_job_progress(engine, job_id, {
+        "status": "starting",
+        "message": f"Launching crawler{chunk_label}... ({chunk_count or '?'} sites)",
+    })
 
     proc = None
     try:
@@ -307,22 +363,28 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
         _flush_logs(engine, job_id, log_lines)
 
         if proc.returncode == 0:
-            logger.info(f"Job {job_id}: Crawl completed successfully")
-            try:
-                resolved_eid = _resolve_experiment_id_from_db(engine)
-                if resolved_eid:
-                    _propagate_experiment_id(engine, pipeline_id, resolved_eid)
-            except Exception as prop_err:
-                logger.warning(f"Job {job_id}: experiment_id propagation failed (crawl still OK): {prop_err}")
+            logger.info(f"Job {job_id}: Crawl{chunk_label} completed successfully")
+            if not experiment_id:
+                try:
+                    resolved_eid = _resolve_experiment_id_from_db(engine)
+                    if resolved_eid:
+                        _propagate_experiment_id(engine, pipeline_id, resolved_eid)
+                except Exception as prop_err:
+                    logger.warning(f"Job {job_id}: experiment_id propagation failed (crawl still OK): {prop_err}")
             return True, logs_text
         else:
-            logger.error(f"Job {job_id}: Crawl failed with code {proc.returncode}")
+            logger.error(f"Job {job_id}: Crawl{chunk_label} failed with code {proc.returncode}")
             return False, logs_text
 
     except Exception as e:
         logger.error(f"Job {job_id}: Crawl exception: {e}")
         return False, str(e)
     finally:
+        if chunk_path:
+            try:
+                os.remove(chunk_path)
+            except OSError:
+                pass
         if proc:
             try:
                 os.killpg(proc.pid, signal.SIGKILL)
@@ -366,6 +428,7 @@ def run_worker():
             job_id, job_type, config, experiment_id, pipeline_id = job
             logger.info(f"Claimed job {job_id} (type={job_type}, experiment={experiment_id})")
 
+            is_chunked = (config or {}).get("chunk_index") is not None
             success, logs_text = execute_crawl(job_id, config, experiment_id, engine, pipeline_id)
 
             if success:
@@ -373,7 +436,8 @@ def run_worker():
                 logger.info(f"Job {job_id}: Pipeline {pipeline_id} - next step now eligible")
             else:
                 fail_job(engine, job_id, "Crawl process failed", logs_text)
-                cascade_fail_dependents(engine, job_id, pipeline_id)
+                if not is_chunked:
+                    cascade_fail_dependents(engine, job_id, pipeline_id)
 
         except Exception as e:
             logger.error(f"Worker loop error: {e}", exc_info=True)

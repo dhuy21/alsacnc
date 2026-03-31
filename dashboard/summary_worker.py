@@ -63,6 +63,12 @@ def _claim_job(engine):
                         WHERE dep.id = pj.depends_on_id AND dep.status = 'completed'
                     )
                   )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM pipeline_jobs sibling
+                    WHERE sibling.pipeline_id = pj.pipeline_id
+                      AND sibling.job_type = 'crawl'
+                      AND sibling.status IN ('pending', 'running')
+                  )
                 ORDER BY pj.created_at
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
