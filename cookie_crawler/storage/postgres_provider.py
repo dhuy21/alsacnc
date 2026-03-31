@@ -244,13 +244,22 @@ logger = logging.getLogger("openwpm")
 class PostgresStorageProvider(StructuredStorageProvider):
     """Stores OpenWPM structured data in PostgreSQL with ``openwpm_`` prefix."""
 
+    _CONNECT_KWARGS = {
+        "connect_timeout": 10,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 3,
+        "options": "-c statement_timeout=60000",
+    }
+
     def __init__(self, db_url: str) -> None:
         super().__init__()
         self.db_url = db_url
         self.conn: Optional[PgConnection] = None
 
     async def init(self) -> None:
-        self.conn = psycopg2.connect(self.db_url)
+        self.conn = psycopg2.connect(self.db_url, **self._CONNECT_KWARGS)
         self.conn.autocommit = False
         with self.conn.cursor() as cur:
             cur.execute(POSTGRES_SCHEMA)
@@ -277,7 +286,7 @@ class PostgresStorageProvider(StructuredStorageProvider):
                     self.conn.close()
                 except Exception:
                     pass
-            self.conn = psycopg2.connect(self.db_url)
+            self.conn = psycopg2.connect(self.db_url, **self._CONNECT_KWARGS)
             self.conn.autocommit = False
             logger.info("PostgresStorageProvider: reconnected to database")
         except Exception as e:
