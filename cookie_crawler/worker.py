@@ -242,18 +242,21 @@ def _flush_logs(engine, job_id, log_lines):
         pass
 
 
-def _load_crux_origins(csv_path=CRUX_CSV_PATH):
-    """Load origin URLs from the cached CrUX CSV file."""
-    origins = []
+def _load_crux_data(csv_path=CRUX_CSV_PATH):
+    """Load full CrUX data (origin + rank info) from the cached CSV file."""
+    rows = []
     with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            origins.append(row["origin"])
-    return origins
+            rows.append(row)
+    return rows
+
+
+_CRUX_FIELDS = ["origin", "top_rank_country", "top_rank", "ranks", "sampled_from"]
 
 
 def _prepare_chunk_file(job_id, config):
-    """For chunked crawl jobs, prepare a temp file with the domain subset.
+    """For chunked crawl jobs, prepare a CrUX-format CSV with the domain subset.
     Returns (temp_path, num_sites) or (None, None) for non-chunked jobs."""
     chunk_index = config.get("chunk_index")
     if chunk_index is None:
@@ -262,25 +265,32 @@ def _prepare_chunk_file(job_id, config):
     chunk_size = config.get("chunk_size", 500)
     total_websites = config.get("total_websites", 0)
 
-    all_origins = _load_crux_origins()
-    logger.info(f"Job {job_id}: Loaded {len(all_origins)} origins from CrUX CSV")
+    all_rows = _load_crux_data()
+    logger.info(f"Job {job_id}: Loaded {len(all_rows)} origins from CrUX CSV")
 
-    if 0 < total_websites < len(all_origins):
+    if 0 < total_websites < len(all_rows):
         random.seed(42)
-        all_origins = random.sample(all_origins, total_websites)
-        all_origins.sort()
+        all_rows = random.sample(all_rows, total_websites)
+        all_rows.sort(key=lambda r: r["origin"])
 
     start = chunk_index * chunk_size
-    end = min(start + chunk_size, len(all_origins))
-    chunk = all_origins[start:end]
+    end = min(start + chunk_size, len(all_rows))
+    chunk = all_rows[start:end]
 
-    temp_path = f"/tmp/chunk_{job_id}.csv"
-    with open(temp_path, "w") as f:
-        for origin in chunk:
-            f.write(f"{origin}\n")
+    temp_csv = f"/tmp/chunk_{job_id}.csv"
+    temp_json = temp_csv.replace(".csv", "_save_intervals.json")
+
+    with open(temp_csv, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_CRUX_FIELDS)
+        writer.writeheader()
+        for row in chunk:
+            writer.writerow({k: row.get(k, "") for k in _CRUX_FIELDS})
+
+    with open(temp_json, "w") as f:
+        json.dump([len(chunk)], f)
 
     logger.info(f"Job {job_id}: Chunk {chunk_index} — {len(chunk)} sites [{start}:{end}]")
-    return temp_path, len(chunk)
+    return temp_csv, len(chunk)
 
 
 def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
@@ -303,7 +313,7 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
         cmd.extend(["--num_browsers", str(config["num_browsers"])])
 
     if chunk_path:
-        cmd.extend(["--domains_source", "list", "--domains_path", chunk_path, "--override"])
+        cmd.extend(["--domains_path", chunk_path, "--override"])
     elif config.get("num_websites"):
         cmd.extend(["--num_domains", str(config["num_websites"])])
 
@@ -384,10 +394,11 @@ def execute_crawl(job_id, config, experiment_id, engine, pipeline_id=None):
         return False, str(e)
     finally:
         if chunk_path:
-            try:
-                os.remove(chunk_path)
-            except OSError:
-                pass
+            for _f in [chunk_path, chunk_path.replace(".csv", "_save_intervals.json")]:
+                try:
+                    os.remove(_f)
+                except OSError:
+                    pass
         if proc:
             try:
                 os.killpg(proc.pid, signal.SIGKILL)
